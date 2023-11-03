@@ -15,6 +15,7 @@ class Visualizer:
     def __init__(self, drawing_lock):
         self.graph = None
         self.drawing_lock = drawing_lock
+        self.is_search_graph = False
 
         # setup pygame
         pygame.init()
@@ -41,6 +42,8 @@ class Visualizer:
         self.scale = 1
         self.offset = (0, 0)
         self.set_scale()
+
+        self.node_to_color = {}
 
     def run(self):
         while True:
@@ -74,14 +77,25 @@ class Visualizer:
     def set_graph(self, graph: Graph):
         with self.drawing_lock:
             self.graph = graph
+            self.is_search_graph = self.graph.has_node(-1)
             self.set_scale()
+
+    def set_colors(self, node_to_color):
+        self.node_to_color = node_to_color
+
+    def get_color(self, node):
+        return self.node_to_color.get(node, DARK_BLUE)
 
     def set_scale(self):
         if self.graph is None:
             return
 
-        max_x = max(map(lambda x: x[1][0], self.graph.nodes(data="pos")))
-        max_y = max(map(lambda x: x[1][1], self.graph.nodes(data="pos")))
+        increase = 0
+        if self.is_search_graph:
+            increase = 2
+
+        max_x = max(map(lambda x: x[1][0], self.graph.nodes(data="pos"))) + increase
+        max_y = max(map(lambda x: x[1][1], self.graph.nodes(data="pos"))) + increase
         width = self.screen_size[0]
         height = self.screen_size[1]
 
@@ -98,23 +112,72 @@ class Visualizer:
             self.scale = graph_height / max_y
             self.offset = np.array(((width - max_x * self.scale) / 2, margin))
 
+    def get_outside_pos(self, pos, max_x, max_y):
+        pos2 = np.array(pos)
+        if tuple(pos) == (0, 0):
+            return [(-1, 0), (0, -1)]
+        elif tuple(pos) == (max_x, 0):
+            return [(max_x + 1, 0), (max_x, -1)]
+        elif tuple(pos) == (0, max_y):
+            return [(-1, max_y), (0, max_y + 1)]
+        elif tuple(pos) == (max_x, max_y):
+            return [(max_x + 1, max_y), (max_x, max_y + 1)]
+        elif pos[0] == 0:
+            pos2[0] -= 1
+            return [pos2]
+        elif pos[0] == max_x:
+            pos2[0] += 1
+            return [pos2]
+        elif pos[1] == 0:
+            pos2[1] -= 1
+            return [pos2]
+        elif pos[1] == max_x:
+            pos2[1] += 1
+            return [pos2]
+
+        return []
+
     def draw_graph(self):
         self.surface.fill(COLOR_KEY)
         node_radius = self.scale_value(GRAPH_NODE_RADIUS)
         edge_width = self.scale_value(GRAPH_EDGE_WIDTH)
 
+        pos_offset = np.array((0, 0))
+        if self.is_search_graph:
+            pos_offset = np.array((1, 1))
+
+        max_x, max_y = tuple(self.graph.get_max_pos())
+        outside_positions = []
+
         # draw edges
         for edge in self.graph.edges.data("cost"):
-            self.draw_thick_aaline(self.scale_value(self.graph.nodes[edge[0]]['pos']),
-                                   self.scale_value(self.graph.nodes[edge[1]]['pos']),
+            pos1 = self.graph.nodes[edge[0]]['pos']
+            pos2 = self.graph.nodes[edge[1]]['pos']
+            if edge[1] == -1:
+                positions = self.get_outside_pos(pos1, max_x, max_y)
+                pos2 = positions[0]
+                if tuple(pos2) in outside_positions:
+                    pos2 = positions[1]
+                outside_positions.append(tuple(pos2))
+            self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
+                                   self.scale_value(pos2 + pos_offset[1]),
                                    GREEN if edge[2] == 1 else RED,
                                    edge_width)
 
         # draw nodes
         for node, pos in self.graph.nodes(data="pos"):
-            pos = tuple(self.scale_value(pos))
-            gfxdraw.aacircle(self.surface, *pos, node_radius, DARK_BLUE)
-            gfxdraw.filled_circle(self.surface, *pos, node_radius, DARK_BLUE)
+            if node == -1:
+                continue
+            pos = tuple(self.scale_value(pos + pos_offset))
+            gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(node))
+            gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(node))
+
+        # draw outside nodes
+        if self.is_search_graph:
+            for pos in outside_positions:
+                pos = tuple(self.scale_value(np.array(pos) + pos_offset))
+                gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(-1))
+                gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(-1))
 
     def scale_value(self, value: Union[np.ndarray, float, int]):
         if value.__class__ == np.ndarray:
