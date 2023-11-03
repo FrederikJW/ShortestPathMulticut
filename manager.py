@@ -2,7 +2,7 @@ import threading
 import time
 
 from graph import GraphFactory
-from solver import shortest_path_solve
+from solver import ShortestPathSolver
 from utils import generate_distinct_colors
 
 # use a transaction lock to prevent drawing if the graph is changed
@@ -27,7 +27,10 @@ class Manager:
         self.visualizer.set_graph(graph)
 
         search_graph = GraphFactory.generate_grid_search_graph(graph)
-        components = shortest_path_solve(search_graph)
+        solver = ShortestPathSolver(search_graph)
+        components = solver.solve()
+        node_to_value = {node: solver.get_lowest_cost_predecessor(node)[1] for node in search_graph.nodes}
+        search_graph.load_value(node_to_value, "cost")
         colors = set(generate_distinct_colors(len(components)))
         component_to_color = dict(enumerate(colors))
 

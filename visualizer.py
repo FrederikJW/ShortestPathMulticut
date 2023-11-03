@@ -165,19 +165,33 @@ class Visualizer:
                                    edge_width)
 
         # draw nodes
-        for node, pos in self.graph.nodes(data="pos"):
+        for node, data in self.graph.nodes(data=True):
             if node == -1:
                 continue
-            pos = tuple(self.scale_value(pos + pos_offset))
+            pos = tuple(self.scale_value(data["pos"] + pos_offset))
             gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(node))
             gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(node))
 
+            cost = data.get("cost", None)
+            if cost is not None:
+                text_surface = self.font.render(str(cost), True, BLACK)
+                text_rec = text_surface.get_rect()
+                text_rec.center = pos
+                self.surface.blit(text_surface, text_rec)
+
         # draw outside nodes
         if self.is_search_graph:
+            cost = self.graph.nodes[-1]["cost"]
+            if cost is not None:
+                text_surface = self.font.render(str(cost), True, BLACK)
+                text_rec = text_surface.get_rect()
             for pos in outside_positions:
                 pos = tuple(self.scale_value(np.array(pos) + pos_offset))
                 gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(-1))
                 gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(-1))
+                if cost is not None:
+                    text_rec.center = pos
+                    self.surface.blit(text_surface, text_rec)
 
     def scale_value(self, value: Union[np.ndarray, float, int]):
         if value.__class__ == np.ndarray:

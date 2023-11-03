@@ -122,3 +122,7 @@ class Graph(nx.MultiGraph):
 
         return np.array((max_x, max_y))
 
+    def load_value(self, node_to_value, key_word):
+        attrs = {node: {key_word: node_to_value[node]} for node in self.nodes}
+        nx.set_node_attributes(self, attrs)
+
