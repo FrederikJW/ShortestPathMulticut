@@ -36,7 +36,7 @@ class GraphFactory:
         costs = []
         if seed is None:
             for i in range(num_edges):
-                costs.append(random.choices([-1, 1], [0.2, 0.8])[0])
+                costs.append(random.choices([-1, 1], [0.5, 0.5])[0])
         else:
             seed = str(bin(seed))[3:]
             for value in seed:
@@ -56,7 +56,6 @@ class GraphFactory:
         search_graph.add_node(-1, pos=np.array((-1, -1)))
         nodes_map_inv[(-1, -1)] = -1
 
-        edges = []
         num_nodes = len(graph.nodes)
         for node1 in range(num_nodes):
             for node2 in range(node1 + 1, num_nodes):
@@ -105,7 +104,7 @@ class GraphFactory:
                     if search_graph.has_edge(nodes_map_inv[(x1, y1)], nodes_map_inv[(x2, y2)], key=0):
                         key = 1
                     search_graph.add_edge(nodes_map_inv[(x1, y1)], nodes_map_inv[(x2, y2)], key=key,
-                                          cost=graph.get_edge_data(node1, node2)[0].get("cost"))
+                                          cost=graph.get_edge_data(node1, node2)[0].get("cost"), edge=(node1, node2))
 
         return search_graph
 
@@ -122,7 +121,9 @@ class Graph(nx.MultiGraph):
 
         return np.array((max_x, max_y))
 
-    def load_value(self, node_to_value, key_word):
+    def load_values(self, node_to_value, key_word):
         attrs = {node: {key_word: node_to_value[node]} for node in self.nodes}
         nx.set_node_attributes(self, attrs)
 
+    def load_single_value(self, value, key_word):
+        nx.set_node_attributes(self, value, key_word)

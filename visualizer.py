@@ -45,6 +45,7 @@ class Visualizer:
         self.set_scale()
 
         self.node_to_color = {}
+        self.multicut = []
 
     def run(self):
         while True:
@@ -89,6 +90,11 @@ class Visualizer:
 
     def set_colors(self, node_to_color):
         self.node_to_color = node_to_color
+        self.draw_necessary = True
+
+    def set_multicut(self, multicut):
+        self.multicut = multicut
+        self.draw_necessary = True
 
     def get_color(self, node):
         return self.node_to_color.get(node, DARK_BLUE)
@@ -158,7 +164,7 @@ class Visualizer:
         outside_positions = []
 
         # draw edges
-        for edge in self.graph.edges.data("cost"):
+        for edge in self.graph.edges(keys=True, data=True):
             pos1 = self.graph.nodes[edge[0]]['pos']
             pos2 = self.graph.nodes[edge[1]]['pos']
             if edge[1] == -1:
@@ -168,13 +174,16 @@ class Visualizer:
                     pos2 = positions[1]
                 outside_positions.append(tuple(pos2))
 
-            if num_edges < 50:
+            cost = edge[3]["cost"]
+            cut = edge[:3] in self.multicut or (edge[1], edge[0], edge[2]) in self.multicut
+            color = DARK_BLUE if cut else GREEN if cost == 1 else RED
+            if num_edges < 1000:
                 self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
                                        self.scale_value(pos2 + pos_offset[1]),
-                                       GREEN if edge[2] == 1 else RED,
+                                       color,
                                        edge_width)
             else:
-                pygame.draw.line(self.surface, GREEN if edge[2] == 1 else RED,
+                pygame.draw.line(self.surface, color,
                                  self.scale_value(pos1 + pos_offset[0]),
                                  self.scale_value(pos2 + pos_offset[1]))
 
