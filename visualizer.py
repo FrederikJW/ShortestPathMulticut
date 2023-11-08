@@ -16,6 +16,7 @@ class Visualizer:
         self.graph = None
         self.drawing_lock = drawing_lock
         self.is_search_graph = False
+        self.draw_necessary = False
 
         # setup pygame
         pygame.init()
@@ -57,16 +58,21 @@ class Visualizer:
                     self.surface = pygame.Surface(self.screen_size)
                     self.surface.fill(COLOR_KEY)
                     self.set_scale()
+                    self.draw_necessary = True
 
             if self.graph is not None:
-                with self.drawing_lock:
+
+                if self.draw_necessary:
                     self.surface.fill(COLOR_KEY)
-                    self.draw_graph()
+
+                    with self.drawing_lock:
+                        self.draw_graph()
 
                     self.screen.fill(WHITE)
                     self.screen.blit(self.surface, (0, 0))
+                    self.draw_necessary = False
 
-                    pygame.display.update()
+                pygame.display.update()
 
             self.clock.tick(FRAMES_PER_SECOND)
 
@@ -79,6 +85,7 @@ class Visualizer:
             self.graph = graph
             self.is_search_graph = self.graph.has_node(-1)
             self.set_scale()
+            self.draw_necessary = True
 
     def set_colors(self, node_to_color):
         self.node_to_color = node_to_color
@@ -141,6 +148,7 @@ class Visualizer:
         self.surface.fill(COLOR_KEY)
         node_radius = self.scale_value(GRAPH_NODE_RADIUS)
         edge_width = self.scale_value(GRAPH_EDGE_WIDTH)
+        num_edges = len(self.graph.edges)
 
         pos_offset = np.array((0, 0))
         if self.is_search_graph:
@@ -159,11 +167,19 @@ class Visualizer:
                 if tuple(pos2) in outside_positions:
                     pos2 = positions[1]
                 outside_positions.append(tuple(pos2))
-            self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
-                                   self.scale_value(pos2 + pos_offset[1]),
-                                   GREEN if edge[2] == 1 else RED,
-                                   edge_width)
 
+            if num_edges < 50:
+                self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
+                                       self.scale_value(pos2 + pos_offset[1]),
+                                       GREEN if edge[2] == 1 else RED,
+                                       edge_width)
+            else:
+                pygame.draw.line(self.surface, GREEN if edge[2] == 1 else RED,
+                                 self.scale_value(pos1 + pos_offset[0]),
+                                 self.scale_value(pos2 + pos_offset[1]))
+
+        if node_radius < 5:
+            return
         # draw nodes
         for node, data in self.graph.nodes(data=True):
             if node == -1:

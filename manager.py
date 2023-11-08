@@ -19,7 +19,7 @@ class Manager:
     def run(self):
         self.visualization_thread.start()
 
-        graph = GraphFactory.generate_grid((10, 10))
+        graph = GraphFactory.generate_grid((100, 100))
 
         while self.visualizer is None:
             time.sleep(1)
@@ -33,11 +33,12 @@ class Manager:
         search_graph.load_value(node_to_value, "cost")
         colors = set(generate_distinct_colors(len(components)))
         component_to_color = dict(enumerate(colors))
-
         node_to_color = {}
-        for component_id, component in components.items():
-            for node in component:
-                node_to_color[node] = component_to_color[component_id]
+
+        if len(colors) >= len(components):
+            for component_id, component in components.items():
+                for node in component:
+                    node_to_color[node] = component_to_color[component_id]
 
         time.sleep(10)
 
