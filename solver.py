@@ -40,7 +40,7 @@ class ShortestPathSolver:
         # assumption: edge has weight -1
         self.node_to_predecessor[node].update({successor: minimal_cost - 1})
         for predecessor in self.node_to_predecessor[node]:
-            if predecessor == successor:
+            if predecessor == successor or predecessor == node:
                 continue
             self.update_cost(predecessor, node)
 
@@ -50,19 +50,18 @@ class ShortestPathSolver:
     def handle_cycle(self, start_node, end_node):
         cycle, cost = self.find_cycle(start_node, end_node)
         if cost >= 0:
-            # remove edge from the component that made the cycle
             return False
 
         # remove cut edges from graph and add them to the multicut
         for cycle_node, edge in cycle:
             # TODO: all nodes included in the cut can be merged
             self.graph.remove_edge(*edge[:3])
-            self.multicut.append(edge[:3])
-            if cycle_node in (start_node, end_node) and edge[1] in (start_node, end_node):
-                continue
+            self.multicut.append(edge[3].get("id"))
 
-            self.node_to_predecessor[cycle_node].pop(edge[1])
-            self.node_to_predecessor[edge[1]].pop(cycle_node)
+            # remove nodes from node_to_predecessor
+            for neighbour in self.node_to_predecessor[cycle_node]:
+                self.node_to_predecessor[neighbour].pop(cycle_node, None)
+            self.node_to_predecessor[cycle_node] = {}
 
         # delete component
         component_id = self.node_to_component[start_node]
@@ -70,12 +69,20 @@ class ShortestPathSolver:
             self.node_to_component.pop(component_node)
         self.components.pop(component_id)
 
+        # merge nodes
+        nodes = [item[0] for item in cycle]
+        new_node = self.graph.merge_nodes(nodes)
+        self.node_to_predecessor[new_node] = {}
+        # note: node_to_predecessor is not updated in this state, because it will be in the next iteration
+
     def find_cycle(self, start_node, end_node):
         """
         Finds a cycle starting from the start node and following predecessors until start node is reached again.
         :param start_node:
         :return:
         """
+
+        # TODO: consider cycle where start and end node is the same node
 
         predecessors = {}
 

@@ -25,7 +25,7 @@ class GraphFactory:
         for node1 in range(num_nodes):
             for node2 in range(node1 + 1, num_nodes):
                 if ((graph.nodes[node1]['pos'] - graph.nodes[node2]['pos']) ** 2).sum() == 1:
-                    edges.append((node1, node2, {'cost': costs[i]}))
+                    edges.append((node1, node2, {'cost': costs[i], 'id': i}))
                     i += 1
         graph.add_edges_from(edges)
 
@@ -103,8 +103,11 @@ class GraphFactory:
                     key = 0
                     if search_graph.has_edge(nodes_map_inv[(x1, y1)], nodes_map_inv[(x2, y2)], key=0):
                         key = 1
+
+                    # assumption: the original graph only has one edge for any two nodes u and v
+                    data = graph.get_edge_data(node1, node2)[0]
                     search_graph.add_edge(nodes_map_inv[(x1, y1)], nodes_map_inv[(x2, y2)], key=key,
-                                          cost=graph.get_edge_data(node1, node2)[0].get("cost"), edge=(node1, node2))
+                                          cost=data.get("cost"), id=data.get("id"))
 
         return search_graph
 
@@ -127,3 +130,17 @@ class Graph(nx.MultiGraph):
 
     def load_single_value(self, value, key_word):
         nx.set_node_attributes(self, value, key_word)
+
+    def merge_nodes(self, nodes_to_merge):
+        new_node = max(self.nodes) + 1
+
+        self.add_node(new_node)
+
+        for node1, node2, attrs in self.edges(nodes_to_merge, data=True):
+            node1 = new_node
+            node2 = new_node if node2 in nodes_to_merge else node2
+            self.add_edge(node1, node2, **attrs)
+
+        self.remove_nodes_from(nodes_to_merge)
+
+        return new_node
