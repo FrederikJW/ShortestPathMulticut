@@ -10,6 +10,7 @@ class ShortestPathSolver:
 
         # list of edges: [(node1, node2, key, cost), (node2, node3, key, cost)]
         self.multicut = []
+        self.node_remap = {}
 
         # {node: {node: minimal_path_cost}}
         # TODO: do not initialize over all nodes
@@ -18,7 +19,6 @@ class ShortestPathSolver:
         # {node1: {node2: [nodes]}
         # from node1 going to node2 you can reach nodes [nodes]
         # this should better be saved on the node directly
-        self.sign_post = {}
 
         # TODO: maybe save minimum possible cost path per node for optimization
 
@@ -54,7 +54,6 @@ class ShortestPathSolver:
 
         # remove cut edges from graph and add them to the multicut
         for cycle_node, edge in cycle:
-            # TODO: all nodes included in the cut can be merged
             self.graph.remove_edge(*edge[:3])
             self.multicut.append(edge[3].get("id"))
 
@@ -73,11 +72,13 @@ class ShortestPathSolver:
         nodes = [item[0] for item in cycle]
         new_node = self.graph.merge_nodes(nodes)
         self.node_to_predecessor[new_node] = {}
+        self.node_remap.update(dict([(node, new_node) for node in nodes]))
         # note: node_to_predecessor is not updated in this state, because it will be in the next iteration
 
     def find_cycle(self, start_node, end_node):
         """
         Finds a cycle starting from the start node and following predecessors until start node is reached again.
+        :param end_node:
         :param start_node:
         :return:
         """
@@ -136,6 +137,9 @@ class ShortestPathSolver:
         reset = True
         while reset:
             reset = False
+
+            # TODO: handle edges that goes from and to the same node here
+
             # iterate of all nodes initially
             for node in list(self.graph.nodes):
                 if reset:
@@ -194,4 +198,10 @@ class ShortestPathSolver:
         # components are necessary to register cycles and how far has been calculated
         # just save predecessor and score
 
-        return self.multicut, self.components
+        for node in self.node_remap:
+            initial_node = node
+            while node in self.node_remap:
+                node = self.node_remap[node]
+            self.node_remap[initial_node] = node
+
+        return self.multicut, self.components, self.node_remap

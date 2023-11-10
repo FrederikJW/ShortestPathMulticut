@@ -36,7 +36,7 @@ class GraphFactory:
         costs = []
         if seed is None:
             for i in range(num_edges):
-                costs.append(random.choices([-1, 1], [0.5, 0.5])[0])
+                costs.append(random.choices([-1, 1], [0.3, 0.7])[0])
         else:
             seed = str(bin(seed))[3:]
             for value in seed:

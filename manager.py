@@ -35,11 +35,11 @@ class Manager:
 
         # solve
         solver = ShortestPathSolver(search_graph)
-        multicut, components = solver.solve()
+        multicut, components, node_map = solver.solve()
 
         # load values for visualization
         node_to_value = {node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes}
-        visual_graph.load_values(node_to_value, "cost")
+
         colors = set(generate_distinct_colors(len(components)))
         component_to_color = dict(enumerate(colors))
         node_to_color = {}
@@ -50,6 +50,12 @@ class Manager:
                 for node in component:
                     node_to_color[node] = component_to_color[color_id]
                 color_id += 1
+
+        for node, mapped_node in node_map.items():
+            node_to_value[node] = solver.get_lowest_cost_predecessor(mapped_node)[1]
+            node_to_color[node] = node_to_color[mapped_node]
+
+        visual_graph.load_values(node_to_value, "cost")
 
         time.sleep(10)
 

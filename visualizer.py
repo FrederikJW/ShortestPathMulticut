@@ -8,7 +8,6 @@ from pygame import gfxdraw
 
 from constants import *
 from graph import Graph
-import threading
 
 
 class Visualizer:
