@@ -35,7 +35,8 @@ class Manager:
 
         # solve
         solver = ShortestPathSolver(search_graph)
-        multicut, components, node_map = solver.solve()
+        multicut = solver.solve()
+        components = solver.get_components()
 
         # load values for visualization
         node_to_value = {node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes}
@@ -51,16 +52,16 @@ class Manager:
                     node_to_color[node] = component_to_color[color_id]
                 color_id += 1
 
-        for node, mapped_node in node_map.items():
+        for node, mapped_node in solver.get_node_remap().items():
             node_to_value[node] = solver.get_lowest_cost_predecessor(mapped_node)[1]
             node_to_color[node] = node_to_color[mapped_node]
 
         visual_graph.load_values(node_to_value, "cost")
+        visual_graph.load_values(node_to_color, "color")
 
         time.sleep(10)
 
         self.visualizer.set_graph(visual_graph)
-        self.visualizer.set_colors(node_to_color)
         self.visualizer.set_multicut(multicut)
 
         while self.visualization_thread.is_alive():

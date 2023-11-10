@@ -43,7 +43,6 @@ class Visualizer:
         self.offset = (0, 0)
         self.set_scale()
 
-        self.node_to_color = {}
         self.multicut = []
 
     def run(self):
@@ -87,16 +86,9 @@ class Visualizer:
             self.set_scale()
             self.draw_necessary = True
 
-    def set_colors(self, node_to_color):
-        self.node_to_color = node_to_color
-        self.draw_necessary = True
-
     def set_multicut(self, multicut):
         self.multicut = multicut
         self.draw_necessary = True
-
-    def get_color(self, node):
-        return self.node_to_color.get(node, DARK_BLUE)
 
     def set_scale(self):
         if self.graph is None:
@@ -193,8 +185,9 @@ class Visualizer:
             if node == -1:
                 continue
             pos = tuple(self.scale_value(data["pos"] + pos_offset))
-            gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(node))
-            gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(node))
+            color = data.get("color", DARK_BLUE)
+            gfxdraw.aacircle(self.surface, *pos, node_radius, color)
+            gfxdraw.filled_circle(self.surface, *pos, node_radius, color)
 
             cost = data.get("cost", None)
             if cost is not None:
@@ -205,14 +198,17 @@ class Visualizer:
 
         # draw outside nodes
         if self.is_search_graph:
-            cost = self.graph.nodes[-1]["cost"]
+            data = self.graph.nodes[-1]
+            cost = data["cost"]
+            color = data.get("color", DARK_BLUE)
+
             if cost is not None:
                 text_surface = self.font.render(str(cost), True, BLACK)
                 text_rec = text_surface.get_rect()
             for pos in outside_positions:
                 pos = tuple(self.scale_value(np.array(pos) + pos_offset))
-                gfxdraw.aacircle(self.surface, *pos, node_radius, self.get_color(-1))
-                gfxdraw.filled_circle(self.surface, *pos, node_radius, self.get_color(-1))
+                gfxdraw.aacircle(self.surface, *pos, node_radius, color)
+                gfxdraw.filled_circle(self.surface, *pos, node_radius, color)
                 if cost is not None:
                     text_rec.center = pos
                     self.surface.blit(text_surface, text_rec)

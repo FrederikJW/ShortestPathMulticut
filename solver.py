@@ -22,6 +22,17 @@ class ShortestPathSolver:
 
         # TODO: maybe save minimum possible cost path per node for optimization
 
+    def get_components(self):
+        return self.components
+
+    def get_node_remap(self):
+        for node in self.node_remap:
+            initial_node = node
+            while node in self.node_remap:
+                node = self.node_remap[node]
+            self.node_remap[initial_node] = node
+        return self.node_remap
+
     def get_lowest_cost_predecessor(self, node, successor=None):
         minimal_cost_predecessor = None
         minimal_cost = 0
@@ -133,7 +144,7 @@ class ShortestPathSolver:
 
             current_node, cost = heapq.heappop(node_queue)
 
-    def solve(self):
+    def initial_setup(self):
         reset = True
         while reset:
             reset = False
@@ -187,7 +198,8 @@ class ShortestPathSolver:
                             unsearched_nodes.append(new_node)
                             self.node_to_component[new_node] = component_id
 
-        # find cycles (not yet implemented; implement in the above algorithm)
+    def solve(self):
+        self.initial_setup()
 
         # extend components:
         # extend node with the lowest cost path (there must be at least two because a path has two ends)
@@ -198,10 +210,4 @@ class ShortestPathSolver:
         # components are necessary to register cycles and how far has been calculated
         # just save predecessor and score
 
-        for node in self.node_remap:
-            initial_node = node
-            while node in self.node_remap:
-                node = self.node_remap[node]
-            self.node_remap[initial_node] = node
-
-        return self.multicut, self.components, self.node_remap
+        return self.multicut
