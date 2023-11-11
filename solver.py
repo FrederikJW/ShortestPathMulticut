@@ -149,7 +149,15 @@ class ShortestPathSolver:
         while reset:
             reset = False
 
-            # TODO: handle edges that goes from and to the same node here
+            # handle edges from and to the same node
+            for node1, node2, key, data in list(self.graph.edges(data=True, keys=True)):
+                if node1 == node2:
+                    if data.get("cost") < 0:
+                        self.multicut.append(data.get("id"))
+
+                    # edges with negative cost are cut any way and edges with positive cost can be safely ignored
+                    self.node_to_predecessor[node1].pop(node2, None)
+                    self.graph.remove_edge(node1, node2, key)
 
             # iterate of all nodes initially
             for node in list(self.graph.nodes):
