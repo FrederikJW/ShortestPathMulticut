@@ -1,4 +1,5 @@
 import heapq
+import bisect
 
 
 class ShortestPathSolver:
@@ -55,8 +56,26 @@ class ShortestPathSolver:
                 continue
             self.update_cost(predecessor, node)
 
-    def path_find(self, node1, node2):
-        pass
+    def update_component_cost(self, component_id):
+        component_nodes = self.components[component_id]
+        start_nodes = [n for n in component_nodes if len(self.node_to_predecessor[n]) == 1]
+
+        for start_node in start_nodes:
+            node_queue = []
+            predecessor = start_node
+            second_node = list(self.node_to_predecessor[start_node].keys())[0]
+            heapq.heappush(node_queue, (second_node, predecessor))
+
+            while len(node_queue) > 0:
+                current_node, predecessor = heapq.heappop(node_queue)
+                predecessor_cost = self.get_lowest_cost_predecessor(predecessor, current_node)[1]
+                edge_cost = min([data["cost"] for data in self.graph.get_edge_data(current_node, predecessor).values()])
+                self.node_to_predecessor[current_node].update({predecessor: predecessor_cost + edge_cost})
+
+                for next_node in self.node_to_predecessor[current_node].keys():
+                    if next_node == predecessor:
+                        continue
+                    heapq.heappush(node_queue, (next_node, current_node))
 
     def handle_cycle(self, start_node, end_node):
         cycle, cost = self.find_cycle(start_node, end_node)
@@ -93,8 +112,6 @@ class ShortestPathSolver:
         :param start_node:
         :return:
         """
-
-        # TODO: consider cycle where start and end node is the same node
 
         predecessors = {}
 
@@ -206,8 +223,79 @@ class ShortestPathSolver:
                             unsearched_nodes.append(new_node)
                             self.node_to_component[new_node] = component_id
 
+    def search(self, start_node):
+        start_component_id = self.node_to_component[start_node]
+
+        found_nodes = {}
+        # (node, predecessor, cost of path until start node)
+        node_queue = [(start_node, None, 0)]
+        # TODO: neighbors need to be filtered for start node
+        # TODO: compare found nodes from other components for minimum cost
+
+        while len(node_queue) > 0:
+            node, predecessor, cost = node_queue.pop()
+
+            found_nodes[node] = (predecessor, cost)
+
+            lowest_path_cost = self.get_lowest_cost_predecessor(node)[1]
+            if lowest_path_cost < 0 and node != start_node:
+
+                component_id = self.node_to_component[node]
+                if component_id == start_component_id:
+                    # found cycle
+                    continue
+
+                # update node_to_predecessor to prepare for merging
+                iter_node = node
+                iter_predecessor = predecessor
+                while iter_node != start_node:
+                    self.node_to_predecessor[iter_node].update({iter_predecessor: 0})
+                    self.node_to_predecessor[iter_predecessor].update({iter_node: 0})
+                    iter_node, iter_predecessor = iter_predecessor, found_nodes[iter_node][0]
+
+                # merge components
+                old_component = self.components.pop(component_id)
+                self.node_to_component.update({component_node: start_component_id for component_node in old_component})
+                self.components[start_component_id].extend(old_component)
+                self.update_component_cost(start_component_id)
+
+                if lowest_path_cost < -cost:
+                    # cancel search
+                    pass
+                else:
+                    # update found_nodes and node_queue and continue with search
+                    pass
+
+            # add next nodes to node queue and calculate cost
+            for neighbor in [n for n in self.graph.neighbors(node) if n != predecessor]:
+                neighbor_cost = cost + min([data["cost"] for data in self.graph.get_edge_data(neighbor, node).values()])
+                if neighbor in found_nodes:
+                    if found_nodes[neighbor][1] > neighbor_cost:
+                        found_nodes[neighbor] = (node, neighbor_cost)
+                    else:
+                        continue
+
+                bisect.insort(node_queue, (neighbor, node, neighbor_cost), key=lambda x: -x[2])
+
     def solve(self):
         self.initial_setup()
+
+        # find the lowest cost nodes
+        min_cost = float("infinity")
+        min_nodes = []
+        for node in self.graph.nodes:
+            cost = self.get_lowest_cost_predecessor(node)[1]
+            if cost < min_cost:
+                min_cost = cost
+                min_nodes = []
+            if cost <= min_cost:
+                min_nodes.append(node)
+
+        if min_cost >= 0:
+            return self.multicut
+
+        start_node = min_nodes[0]
+        self.search(start_node)
 
         # extend components:
         # extend node with the lowest cost path (there must be at least two because a path has two ends)
