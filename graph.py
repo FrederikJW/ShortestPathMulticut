@@ -131,6 +131,10 @@ class Graph(nx.MultiGraph):
     def load_single_value(self, value, key_word):
         nx.set_node_attributes(self, value, key_word)
 
+    def get_min_cost_edge_data(self, node1, node2):
+        return node1, node2, *min([(key, data) for key, data in
+                                   self.get_edge_data(node1, node2).items()], key=lambda x: x[1]["cost"])
+
     def merge_nodes(self, nodes_to_merge):
         new_node = max(self.nodes) + 1
 

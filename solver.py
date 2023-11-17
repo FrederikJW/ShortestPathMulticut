@@ -78,7 +78,11 @@ class ShortestPathSolver:
                     node_queue.append((next_node, current_node))
 
     def handle_self_edges(self):
-        # handle edges from and to the same node
+        """
+        handle edges from and to the same node
+        :return: None
+        """
+
         for node1, node2, key, data in list(self.graph.edges(data=True, keys=True)):
             if node1 == node2:
                 if data.get("cost") < 0:
@@ -88,41 +92,137 @@ class ShortestPathSolver:
                 self.node_to_predecessor[node1].pop(node2, None)
                 self.graph.remove_edge(node1, node2, key)
 
-    def handle_cycle(self, start_node, end_node):
-        cycle, cost = self.find_cycle(start_node, end_node)
-        if cost >= 0:
-            return False
+    def handle_cycle(self, cycle, create_component=True):
+        """
+        Receives a cycle and handles it by adding the edges to the multicut and merging nodes of the cycle.
+        :param create_component: bool, defines if nodes should be added to new component or left without component
+        :param cycle: list(tuple(node: int, edge: tuple(node: int, node: int, key: int, data: dict)))
+        :return: new_component_id: int
+        """
 
         # remove cut edges from graph and add them to the multicut
-        for cycle_node, edge in cycle:
+        for _, edge in cycle:
             self.graph.remove_edge(*edge[:3])
             self.multicut.append(edge[3].get("id"))
 
-            # remove nodes from node_to_predecessor
-            for neighbour in self.node_to_predecessor[cycle_node]:
-                self.node_to_predecessor[neighbour].pop(cycle_node, None)
-            self.node_to_predecessor[cycle_node] = {}
+        # create necessary variables
+        cycle_nodes = set([item[0] for item in cycle])
+        all_nodes = set()
+        component_ids = set()
 
-        # delete component
-        component_id = self.node_to_component[start_node]
-        for component_node in self.components[component_id]:
-            self.node_to_component.pop(component_node)
-        self.components.pop(component_id)
+        for node in cycle_nodes:
+            component_id = self.node_to_component[node]
+            all_nodes = all_nodes.union(self.components[component_id])
+            component_ids.add(component_id)
+
+        non_cycle_nodes = all_nodes - cycle_nodes
+
+        # remove involved components
+        for component_id in component_ids:
+            self.components.pop(component_id)
+
+        for node in all_nodes:
+            self.node_to_component.pop(node)
 
         # merge nodes
-        nodes = [item[0] for item in cycle]
-        new_node = self.graph.merge_nodes(nodes)
+        new_node = self.graph.merge_nodes(cycle_nodes)
+
+        # update node to predecessor
         self.node_to_predecessor[new_node] = {}
-        self.node_remap.update(dict([(node, new_node) for node in nodes]))
-        # note: node_to_predecessor is not updated in this state, because it will be in the next iteration
+        for cycle_node in cycle_nodes:
+            # remove nodes from node_to_predecessor and update if create_component is true
+            for neighbour in self.node_to_predecessor[cycle_node]:
+                self.node_to_predecessor[neighbour].pop(cycle_node, None)
+                if create_component:
+                    self.node_to_predecessor[neighbour][new_node] = 0
+                    self.node_to_predecessor[new_node][neighbour] = 0
+            self.node_to_predecessor.pop(cycle_node, None)
+
+        self.node_remap.update(dict([(node, new_node) for node in cycle_nodes]))
+
+        if create_component:
+            # create new component
+            non_cycle_nodes.add(new_node)
+            new_component_id = max(self.components.keys()) + 1
+            self.components[new_component_id] = list(non_cycle_nodes)
+            for node in non_cycle_nodes:
+                self.node_to_component[node] = new_component_id
+
+            # update costs
+            self.update_component_cost(new_component_id)
+
+    def find_path(self, start_node, end_node):
+        """
+        Finds a path starting from the start node and following predecessors until start node is reached again.
+        :param start_node: int
+        :param end_node: int
+        :return: None if no path was found or (path: list, cost: int) if a path was found
+            path = list(tuple(node: int, edge: tuple(node: int, node: int, key: int, data: dict)))
+        """
+
+        # TODO: should not be necessary to do this but check first
+        if start_node == end_node:
+            return [], 0
+
+        predecessors = {}
+
+        node_queue = []
+        current_node = start_node
+        cost = 0
+
+        found = []
+        found_nodes = []
+
+        while current_node is not None:
+            for neighbor in self.node_to_predecessor[current_node]:
+                if neighbor in found_nodes:
+                    continue
+
+                # get edges between current node and neighbor
+                edges_data = self.graph.get_edge_data(current_node, neighbor)
+                # filter out already found edges (to prevent using one edge twice)
+                edges_data = list(filter(lambda x: (current_node, neighbor, x[0]) not in found, edges_data.items()))
+                if len(edges_data) == 0:
+                    continue
+
+                # use edge with minimum cost
+                key, min_edge_data = min(edges_data, key=lambda x: x[1]["cost"])
+
+                total_neighbor_cost = cost + min_edge_data["cost"]
+                predecessors[neighbor] = current_node, (current_node, neighbor, key, min_edge_data)
+
+                # mark edge as found
+                found.append((current_node, neighbor, key))
+                found.append((neighbor, current_node, key))
+
+                # mark node as found
+                found_nodes.append(neighbor)
+
+                if neighbor == end_node:
+                    # found path
+                    predecessor_node, edge = predecessors[end_node]
+                    path = []
+                    while predecessor_node != start_node:
+                        path.append((predecessor_node, edge))
+                        predecessor_node, edge = predecessors[predecessor_node]
+                    path.append((start_node, edge))
+                    path.reverse()
+                    return path, total_neighbor_cost
+
+                node_queue.append((neighbor, total_neighbor_cost))
+
+            current_node, cost = node_queue.pop()
 
     def find_cycle(self, start_node, end_node):
         """
         Finds a cycle starting from the start node and following predecessors until start node is reached again.
+        Assumes there is an edge between start node and end node and a path that doesn't include this edge.
         :param end_node:
         :param start_node:
         :return:
         """
+
+        # TODO: make this function use the find path function and add the last edge manually
 
         predecessors = {}
 
@@ -210,7 +310,9 @@ class ShortestPathSolver:
                         if cost == -1:
                             # check for cycle
                             if new_node in new_component:
-                                self.handle_cycle(new_node, unsearched_node)
+                                cycle, cost = self.find_cycle(new_node, unsearched_node)
+                                # positive costs cannot happen because only negative edges are considered
+                                self.handle_cycle(cycle, create_component=False)
                                 reset = True
                                 break
 
@@ -227,18 +329,23 @@ class ShortestPathSolver:
                             self.node_to_component[new_node] = component_id
 
     def merge_components(self, swallower, swallowee):
+        if swallower == swallowee:
+            return
         swallowee_nodes = self.components.pop(swallowee)
         self.components[swallower].extend(swallowee_nodes)
         self.node_to_component.update({node: swallower for node in swallowee_nodes})
 
     def search_from(self, start_node):
+        # TODO: think about cycle of two edges (not a problem if weights are only -1 and 1, but will become a
+        #  problem later on)
+
         start_component_id = self.node_to_component[start_node]
 
         found_nodes = {start_node: (None, 0)}
         # (node, predecessor, cost of path until start node)
         node_queue = []
         for neighbor in [n for n in self.graph.neighbors(start_node) if self.node_to_component[n] != start_component_id]:
-            neighbor_cost = min([data["cost"] for data in self.graph.get_edge_data(neighbor, start_node).values()])
+            neighbor_cost = self.graph.get_min_cost_edge_data(neighbor, start_node)[3]["cost"]
             bisect.insort(node_queue, (neighbor, start_node, neighbor_cost), key=lambda x: -x[2])
 
         # TODO: compare found nodes from other components for minimum cost
@@ -250,12 +357,29 @@ class ShortestPathSolver:
 
             lowest_path_cost = self.get_lowest_cost_predecessor(node)[1]
             if lowest_path_cost < 0 and node != start_node:
-
                 component_id = self.node_to_component[node]
+
                 if component_id == start_component_id:
-                    # TODO: implement general cycle handling
-                    # found cycle
-                    continue
+                    # handle cycle
+                    # find path through component and add to cycle
+                    path, path_cost = self.find_path(start_node, node)
+                    if path_cost + cost >= 0:
+                        continue
+
+                    cycle = list(path)
+
+                    # find newly found path through positive edges and add to cycle
+                    iter_node = node
+                    iter_predecessor = predecessor
+                    while iter_node != start_node:
+                        edge = self.graph.get_min_cost_edge_data(iter_node, iter_predecessor)
+                        cycle.append((iter_node, edge))
+                        iter_node, iter_predecessor = iter_predecessor, found_nodes[iter_predecessor][0]
+
+                    self.handle_cycle(cycle)
+                    return True
+
+                # merge components and all nodes inbetween
 
                 # update node_to_predecessor to prepare for merging
                 iter_node = node
@@ -264,8 +388,6 @@ class ShortestPathSolver:
                     self.node_to_predecessor[iter_node].update({iter_predecessor: 0})
                     self.node_to_predecessor[iter_predecessor].update({iter_node: 0})
                     self.merge_components(start_component_id, self.node_to_component[iter_node])
-                    # self.components[start_component_id].append(iter_node)
-                    # self.node_to_component[iter_node] = start_component_id
                     iter_node, iter_predecessor = iter_predecessor, found_nodes[iter_predecessor][0]
 
                 self.update_component_cost(start_component_id)
@@ -310,15 +432,19 @@ class ShortestPathSolver:
                 if cost <= min_cost:
                     min_nodes.append(node)
 
-            if min_cost >= 0:
-                return self.multicut
+            # if min_cost >= 0:
+            #     print("no nodes with negative cost left")
+            #     return self.multicut
 
             self.handle_self_edges()
             start_node = min_nodes[0]
             if not self.search_from(start_node):
                 # in this case searching didn't find a new component to merge and no cycle
                 ignore_nodes.append(start_node)
-                continue
+            else:
+                ignore_nodes = []
+
+        print("stepped out of search")
 
     def solve(self):
         self.initial_setup()

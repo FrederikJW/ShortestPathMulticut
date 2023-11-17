@@ -38,12 +38,11 @@ class Manager:
         multicut = solver.solve()
         components = solver.get_components()
 
-        # load values for visualization
-        node_to_value = {node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes}
 
         colors = set(generate_distinct_colors(len(components)))
         component_to_color = dict(enumerate(colors))
         node_to_color = {}
+        node_to_value = {}
 
         color_id = 0
         if len(colors) >= len(components):
@@ -55,6 +54,8 @@ class Manager:
         for node, mapped_node in solver.get_node_remap().items():
             node_to_value[node] = solver.get_lowest_cost_predecessor(mapped_node)[1]
             node_to_color[node] = node_to_color[mapped_node]
+
+        node_to_value.update({node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes if node not in node_to_value})
 
         visual_graph.load_values(node_to_value, "cost")
         visual_graph.load_values(node_to_color, "color")
