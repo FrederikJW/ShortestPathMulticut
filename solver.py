@@ -92,6 +92,9 @@ class ShortestPathSolver:
                 self.node_to_predecessor[node1].pop(node2, None)
                 self.graph.remove_edge(node1, node2, key)
 
+        for key in self.node_to_predecessor.keys():
+            self.node_to_predecessor[key].pop(key, None)
+
     def handle_cycle(self, cycle, create_component=True):
         """
         Receives a cycle and handles it by adding the edges to the multicut and merging nodes of the cycle.
@@ -139,6 +142,8 @@ class ShortestPathSolver:
             self.node_to_predecessor.pop(cycle_node, None)
 
         self.node_remap.update(dict([(node, new_node) for node in cycle_nodes]))
+
+        self.handle_self_edges()
 
         if create_component:
             # create new component
