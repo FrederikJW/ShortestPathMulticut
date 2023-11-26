@@ -84,3 +84,7 @@ class Manager:
         from visualizer import Visualizer
         self.visualizer = Visualizer(drawing_lock)
         self.visualizer.run()
+
+    def exit(self):
+        self.visualizer.exit_flag = True
+        self.visualization_thread.join()

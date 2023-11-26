@@ -38,7 +38,7 @@ class ShortestPathSolver:
         minimal_cost_predecessor = None
         minimal_cost = 0
         for predecessor, cost in self.node_to_predecessor[node].items():
-            if successor is not None and predecessor == successor:
+            if (successor is not None and predecessor == successor) or node == predecessor:
                 continue
             if cost < minimal_cost:
                 minimal_cost_predecessor = predecessor

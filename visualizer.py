@@ -12,6 +12,8 @@ from graph import Graph
 
 class Visualizer:
     def __init__(self, drawing_lock):
+        self.exit_flag = False
+
         self.graph = None
         self.drawing_lock = drawing_lock
         self.is_search_graph = False
@@ -47,6 +49,9 @@ class Visualizer:
 
     def run(self):
         while True:
+            if self.exit_flag:
+                self.quit()
+
             events = pygame.event.get()
             pygame.event.pump()
             for event in events:
