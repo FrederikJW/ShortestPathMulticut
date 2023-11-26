@@ -336,6 +336,8 @@ class ShortestPathSolver:
         self.node_to_component.update({node: swallower for node in swallowee_nodes})
 
     def search_from(self, start_node):
+        # TODO: consider cycles in component
+
         # TODO: think about cycle of two edges (not a problem if weights are only -1 and 1, but will become a
         #  problem later on)
 

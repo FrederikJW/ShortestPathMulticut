@@ -57,16 +57,25 @@ class Manager:
 
         node_to_value.update({node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes if node not in node_to_value})
 
+
+
+        input("Waiting for input")
+
+        self.visualizer.set_graph(visual_graph)
+
+        input("Waiting for input")
+
         visual_graph.load_values(node_to_value, "cost")
         visual_graph.load_values(node_to_color, "color")
 
-        time.sleep(10)
-
-        self.visualizer.set_graph(visual_graph)
         self.visualizer.set_multicut(multicut)
 
+        input("Waiting for input")
+
+        self.visualizer.set_graph(graph)
+
         while self.visualization_thread.is_alive():
-            time.sleep(5)
+            time.sleep(1)
 
     def run_visualizer(self):
         # pygame should be imported only in the new thread and not in the main thread

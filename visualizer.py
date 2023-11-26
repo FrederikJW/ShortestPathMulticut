@@ -199,7 +199,7 @@ class Visualizer:
         # draw outside nodes
         if self.is_search_graph:
             data = self.graph.nodes[-1]
-            cost = data["cost"]
+            cost = data.get("cost", 0)
             color = data.get("color", DARK_BLUE)
 
             if cost is not None:
