@@ -9,7 +9,7 @@ manager = None
 def main():
     global manager
     manager = Manager()
-    manager.run()
+    manager.run_external_solver()
 
 
 def on_terminate(signum, frame):

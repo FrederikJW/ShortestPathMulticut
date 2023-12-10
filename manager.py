@@ -1,3 +1,4 @@
+import sys
 import threading
 import time
 
@@ -6,6 +7,9 @@ import networkx as nx
 from graph import GraphFactory
 from solver import ShortestPathSolver
 from utils import generate_distinct_colors
+
+sys.path.append("C:/Users/FreBe/projects/ShortestPathMulticut/build/Release")
+import spm_solver
 
 # use a transaction lock to prevent drawing if the graph is changed
 drawing_lock = threading.Lock()
@@ -17,6 +21,38 @@ class Manager:
         # run visualizer in new thread
         self.visualizer = None
         self.visualization_thread = threading.Thread(target=self.run_visualizer)
+
+    def run_external_solver(self):
+        self.visualization_thread.start()
+
+        graph = GraphFactory.generate_grid((20, 20))
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        search_graph = GraphFactory.generate_grid_search_graph(graph)
+        visual_graph = search_graph.copy()
+
+        input("Waiting for input")
+
+        self.visualizer.set_graph(visual_graph)
+
+        input("Waiting for input")
+
+        solver = spm_solver.get_solver()
+        solver.load_search_graph(*(search_graph.export()))
+        multicut = solver.solve()
+
+        self.visualizer.set_multicut(multicut)
+
+        input("Waiting for input")
+
+        self.visualizer.set_graph(graph)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
 
     def run(self):
         self.visualization_thread.start()
@@ -38,7 +74,6 @@ class Manager:
         multicut = solver.solve()
         components = solver.get_components()
 
-
         colors = set(generate_distinct_colors(len(components)))
         component_to_color = dict(enumerate(colors))
         node_to_color = {}
@@ -55,9 +90,8 @@ class Manager:
             node_to_value[node] = solver.get_lowest_cost_predecessor(mapped_node)[1]
             node_to_color[node] = node_to_color[mapped_node]
 
-        node_to_value.update({node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes if node not in node_to_value})
-
-
+        node_to_value.update({node: solver.get_lowest_cost_predecessor(node)[1] for node in visual_graph.nodes if
+                              node not in node_to_value})
 
         input("Waiting for input")
 

@@ -148,3 +148,9 @@ class Graph(nx.MultiGraph):
         self.remove_nodes_from(nodes_to_merge)
 
         return new_node
+
+    def export(self):
+        nodes = [(node_id, 0, 0) for node_id in self.nodes]
+        edges = [(node1, node2, key, data.get("cost"), data.get("id")) for node1, node2, key, data in
+                 self.edges(data=True, keys=True)]
+        return nodes, edges
