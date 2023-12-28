@@ -12,6 +12,12 @@
 
 namespace py = pybind11;
 
+struct TupleComparator {
+    bool operator()(const std::tuple<int, int, int>& lhs, const std::tuple<int, int, int>& rhs) const {
+        return std::get<2>(lhs) < std::get<2>(rhs);
+    }
+};
+
 // Edge structure to store cost
 struct Edge {
     int node1;
@@ -40,7 +46,7 @@ private:
     std::map<int, Edge> allEdges;
     std::map<int, std::map<int, std::map<int, Edge>>> adjacencyList;
     std::map<int, Node> allNodes;
-    
+
 public:
     // Function to add an edge with a specified cost
     void addEdge(int v1, int v2, int key, int cost, int id) {
@@ -49,8 +55,6 @@ public:
         adjacencyList[v1][v2][key] = Edge(v1, v2, key, cost, id);
         adjacencyList[v2][v1][key] = Edge(v2, v1, key, cost, id);
         allEdges[id] = Edge(v1, v2, key, cost, id);
-        py::print("found ", adjacencyList[v1][v2].size(), " edges between ", v1, " and ", v2);
-        py::print("found ", adjacencyList[v2][v1].size(), " edges between ", v2, " and ", v1);
     };
 
     void addEdge(int v1, int v2, int cost, int id) {
@@ -66,7 +70,6 @@ public:
         adjacencyList[v1][v2][newKey] = Edge(v1, v2, newKey, cost, id);
         adjacencyList[v2][v1][newKey] = Edge(v2, v1, newKey, cost, id);
         allEdges[id] = Edge(v1, v2, newKey, cost, id);
-        py::print("found ", adjacencyList[v1][v2].size(), " edges between ", v1, " and ", v2);
     };
 
     void removeEdge(int v1, int v2, int key, int id) {
@@ -112,7 +115,7 @@ public:
 
     std::vector<Edge> getEdges(int node) {
         std::vector<Edge> edges;
-
+        py::print("found", adjacencyList[node].size(), "edges for", node);
         for (const auto& pair1 : adjacencyList[node]) {
             for (const auto& pair2 : pair1.second) {
                 edges.push_back(pair2.second);
@@ -130,43 +133,34 @@ public:
     };
 
     Edge getMinCostEdge(int node1, int node2) {
-        py::print("get min cost edge between ", node1, " and ", node2);
-        py::print("found ", adjacencyList[node1][node2].size(), " edges");
-
+        py::print("found", adjacencyList[node1][node2].size(), "edges between", node1, "and", node2);
         std::optional<Edge> edge;
-        int minCost = std::numeric_limits<int>::infinity();
+        int minCost = 100;
         for (const auto& pair : adjacencyList[node1][node2]) {
-            py::print("checking edge with cost ", pair.second.cost);
             if (pair.second.cost < minCost) {
-                py::print("edge cost is smaller that min cost");
+                py::print(pair.second.cost, "is smaller than", minCost);
                 edge = pair.second;
                 minCost = edge->cost;
+            } else {
+                py::print(pair.second.cost, "is not smaller than", minCost);
             };
         };
 
         if (!edge) {
             throw std::runtime_error("expected to find edge between node " + std::to_string(node1) + " and " + std::to_string(node2));
         }
-
+        py::print("found edge");
         return *edge;
     };
 
     Edge getMinCostEdge(int node1, int node2, std::set<int> exceptEdges) {
-        py::print("get min cost edge between ", node1, " and ", node2);
-        py::print("found ", adjacencyList[node1][node2].size(), " edges");
+        py::print("found", adjacencyList[node1][node2].size(), "edges between", node1, "and", node2);
         std::optional<Edge> edge;
-        int minCost = std::numeric_limits<int>::infinity();
+        int minCost = 100;
         for (const auto& pair : adjacencyList[node1][node2]) {
-            py::print("checking edge with cost ", pair.second.cost);
             if (pair.second.cost < minCost) {
-                py::print("edge cost is smaller that min cost");
                 // filter out edges from exceptEdges
-                if (exceptEdges.contains(pair.second.id)) {
-                    py::print("edge is in except edges ", pair.second.id);
-                    continue;
-                }
-
-                py::print("found edge");
+                if (exceptEdges.contains(pair.second.id)) continue;
 
                 edge = pair.second;
                 minCost = edge->cost;
@@ -255,9 +249,9 @@ private:
     Graph graph;
     Graph searchGraph;
     std::map<int, int> nodeToComponent;
-    std::map<int, std::vector<int>> components;
+    std::map<int, std::set<int>> components;
     std::map<int, std::map<int, int>> nodeToPredecessor;
-    std::vector<int> multicut;
+    std::set<int> multicut;
 
 
 public:
@@ -292,7 +286,7 @@ public:
         int maxx;
         int maxy;
         std::tie(maxx, maxy) = maxPos;
-        
+
         int n = 0;
         for (size_t x = 0; x < maxx; x++) {
             for (size_t y = 0; y < maxy; y++) {
@@ -312,11 +306,13 @@ public:
     };
 
     std::tuple<int, int> getLowestCostPredecessor(int node) {
-        int minCostPredecessor;
-        int minCost = 100;
+        int minCostPredecessor = node;
+        int minCost = 0;
+        py::print("node", node, "has", nodeToPredecessor[node].size(), "predecessor");
 
         for (const auto& [predecessor, cost] : nodeToPredecessor[node]) {
             if (node == predecessor) continue;
+            py::print("predecessor", predecessor, "has cost", cost);
             if (cost < minCost) {
                 minCostPredecessor = predecessor;
                 minCost = cost;
@@ -328,7 +324,7 @@ public:
 
     std::tuple<int, int> getLowestCostPredecessor(int node, int exceptNode) {
         int minCostPredecessor;
-        int minCost = 100;
+        int minCost = 0;
 
         for (const auto& [predecessor, cost] : nodeToPredecessor[node]) {
             if (node == predecessor) continue;
@@ -348,8 +344,7 @@ public:
         for (const Edge& edge : searchGraph.getAllEdges()) {
             if (edge.node1 == edge.node2) {
                 if (edge.cost < 0) {
-                    auto it = std::lower_bound(multicut.begin(), multicut.end(), edge.id);
-                    multicut.insert(it, edge.id);
+                    multicut.insert(edge.id);
                 };
 
                 auto it1 = nodeToPredecessor[edge.node1].find(edge.node2);
@@ -365,7 +360,7 @@ public:
     void updateComponentCost(int componentId) {
         py::print("updating costs for component ", componentId);
 
-        std::vector<int> nodes = components[componentId];
+        std::set<int> nodes = components[componentId];
         std::vector<int> startNodes;
         for (const auto& node : nodes) {
             if (nodeToPredecessor[node].size() < 2) {
@@ -381,6 +376,7 @@ public:
             nodeQueue.push({secondNode, predecessor});
             while (!nodeQueue.empty()) {
                 auto [currentNode, predecessor] = nodeQueue.front();
+                if (currentNode == predecessor) continue;
                 nodeQueue.pop();
                 int predecessorCost = std::get<1>(getLowestCostPredecessor(predecessor, currentNode));
                 int edgeCost = searchGraph.getMinCostEdge(currentNode, predecessor).cost;
@@ -411,32 +407,23 @@ public:
         foundNodes.insert(startNode);
 
         while (true) {
-            py::print("current node: ", currentNode);
             for (const auto& pair : nodeToPredecessor[currentNode]) {
                 int neighbor = pair.first;
 
-                py::print("checking neighbor: ", neighbor);
-
                 if (foundNodes.contains(neighbor)) continue;
 
-                py::print("neighbor not found yet");
-
                 Edge minEdge = searchGraph.getMinCostEdge(currentNode, neighbor, foundEdges);
-
-                py::print("found edge with cost ", minEdge.cost);
 
                 int totalNeighborCost = cost + minEdge.cost;
                 predecessors[neighbor] = minEdge;
 
-                // mark edge as 
-                py::print("adding edge to found edges ", minEdge.id);
+                // mark edge as
                 foundEdges.insert(minEdge.id);
-                
+
 
                 // mark node as found
                 foundNodes.insert(neighbor);
 
-                py::print("check if neighbor is end Node");
                 if (neighbor == endNode) {
                     // found cycle
                     Edge edge = predecessors[endNode];
@@ -453,11 +440,8 @@ public:
 
                     return { path, totalNeighborCost };
                 };
-                py::print("adding to node queue: ", neighbor, ", ", totalNeighborCost);
                 nodeQueue.emplace_back(neighbor, totalNeighborCost);
             };
-
-            py::print("checked all neighbors");
 
             if (nodeQueue.empty()) break;
             std::tie(currentNode, cost) = nodeQueue.back();
@@ -473,8 +457,7 @@ public:
         // remove cut edges from graph and add them to the multicut
         for (const auto& [node, edge] : cycle) {
             searchGraph.removeEdge(edge.node1, edge.node2, edge.key, edge.id);
-            auto it = std::lower_bound(multicut.begin(), multicut.end(), edge.id);
-            multicut.insert(it, edge.id);
+            multicut.insert(edge.id);
         };
 
         // create necessary variables
@@ -485,7 +468,7 @@ public:
         std::set<int> componentIdsSet;
         std::transform(cycleNodesSet.begin(), cycleNodesSet.end(), std::inserter(componentIdsSet, componentIdsSet.begin()),
             [this](const auto& node) { return nodeToComponent[node]; });
-        
+
         std::set<int> allNodesSet;
         for (const auto& componentId : componentIdsSet) {
             std::set_union(allNodesSet.begin(), allNodesSet.end(), components[componentId].begin(), components[componentId].end(), std::inserter(allNodesSet, allNodesSet.begin()));
@@ -525,8 +508,7 @@ public:
         if (createComponent) {
             nonCycleNodesSet.insert(newNode);
             int newComponentId = getNewComponentId();
-            std::vector<int> newComponent(nonCycleNodesSet.begin(), nonCycleNodesSet.end());
-            components[newComponentId] = newComponent;
+            components[newComponentId] = nonCycleNodesSet;
             for (const auto& node : nonCycleNodesSet) {
                 nodeToComponent[node] = newComponentId;
             };
@@ -535,8 +517,6 @@ public:
     };
 
     void initialSetup() {
-        py::print("starting initial setup");
-
         bool reset = true;
 
         while (reset) {
@@ -557,8 +537,8 @@ public:
                 py::print("creating new component for node ", nodeId);
 
                 // create new component
-                std::vector<int> newComponent;
-                newComponent.push_back(nodeId);
+                std::set<int> newComponent;
+                newComponent.insert(nodeId);
                 int newComponentId = getNewComponentId();
                 components[newComponentId] = newComponent;
                 nodeToComponent[nodeId] = newComponentId;
@@ -585,7 +565,8 @@ public:
 
                         if (edge.cost == -1) {
                             // check for cycle
-                            if (std::binary_search(newComponent.begin(), newComponent.end(), newNode)) {
+                            // --------------------------------------------------------------------
+                            if (newComponent.contains(newNode)) {
                                 py::print("found cycle for nodes ", newNode, " and ", unsearchedNode, " in component ", newComponentId);
 
                                 // cycle found
@@ -609,8 +590,8 @@ public:
                             nodeToPredecessor[unsearchedNode][newNode] = 0;
 
                             // add node to component
-                            auto it = std::lower_bound(newComponent.begin(), newComponent.end(), edge.node2);
-                            newComponent.insert(it, edge.node2);
+                            newComponent.insert(edge.node2);
+                            components[newComponentId] = newComponent;
                             unsearchedNodes.push_back(edge.node2);
                             nodeToComponent[edge.node2] = newComponentId;
 
@@ -621,11 +602,167 @@ public:
                 };
             };
         };
-        py::print("finished initial setup");
     };
 
-    std::vector<int> solve() {
+    void mergeComponents(int swallower, int swallowee) {
+        py::print("merging component ", swallowee, " into component ", swallower);
+        if (swallower == swallowee) {
+            throw std::runtime_error("Merging a component into itself is not possible.");
+        };
+
+        std::set_union(components[swallower].begin(), components[swallower].end(), components[swallowee].begin(), components[swallowee].end(), std::inserter(components[swallower], components[swallower].begin()));
+
+        for (const auto& node : components[swallowee]) {
+            nodeToComponent[node] = swallower;
+        };
+
+        components.erase(swallowee);
+    };
+
+    bool searchFrom(int startNode) {
+        int startComponentId = nodeToComponent[startNode];
+
+        py::print("searching from", startNode, "of component", startComponentId);
+
+        std::map<int, std::tuple<int, int>> foundNodes;
+        foundNodes[startNode] = { startNode, 0 };
+        std::set<std::tuple<int, int, int>, TupleComparator> nodeQueue;
+        int iterNode;
+        int iterPredecessor;
+
+        for (const auto& pair : searchGraph.getEdges(startNode)) {
+            int neighbor = pair.node2;
+            py::print("neighbor:", neighbor, "of component", nodeToComponent[neighbor]);
+            // difference to python implementation
+            // check if neigbor is in node to predecessor
+            auto it = nodeToPredecessor[startNode].find(neighbor);
+            if (it == nodeToPredecessor[startNode].end()) {
+                int neighborCost = searchGraph.getMinCostEdge(startNode, neighbor).cost;
+                nodeQueue.emplace(neighbor, startNode, neighborCost);
+                py::print("added to node queue");
+            };
+        };
+
+        py::print(startNode, "has", nodeQueue.size(), "neighbors");
+
+        while (!nodeQueue.empty()) {
+            auto firstElement = *nodeQueue.begin();
+            auto [node, predecessor, cost] = firstElement;
+            py::print("step: ", node, predecessor, cost);
+            nodeQueue.erase(firstElement);
+
+            foundNodes[node] = { predecessor, cost };
+
+            int lowestPathCost = std::get<1>(getLowestCostPredecessor(node));
+            py::print("lowest path cost:", lowestPathCost);
+            if (lowestPathCost < 0 && node != startNode) {
+                int componentId = nodeToComponent[node];
+                py::print("component id:", componentId, "start component id:", startComponentId);
+                if (componentId == startComponentId) {
+                    py::print("found cycle for nodes ", startNode, " and ", node, " in component ", componentId);
+                    // found cycle
+                    // find path through component and add to cycle
+                    auto [path, pathCost] = findPath(startNode, node);
+
+                    if (pathCost + cost >= 0) continue;
+
+                    // find newly found path through positive edges and add to cycle
+                    iterNode = node;
+                    iterPredecessor = predecessor;
+                    while (iterNode != startNode) {
+                        Edge edge = searchGraph.getMinCostEdge(iterNode, iterPredecessor);
+                        path.emplace_back(iterNode, edge);
+                        iterNode = iterPredecessor;
+                        iterPredecessor = std::get<0>(foundNodes[iterPredecessor]);
+                    };
+                    handleCycle(path);
+                    return true;
+                };
+
+                // merge components and all nodes inbetween
+
+                // update node_to_predecessor to prepare for merging
+                iterNode = node;
+                iterPredecessor = predecessor;
+                while (iterNode != startNode) {
+                    nodeToPredecessor[iterNode][iterPredecessor] = 0;
+                    nodeToPredecessor[iterPredecessor][iterNode] = 0;
+                    if (startComponentId != nodeToComponent[iterNode]) {
+                        mergeComponents(startComponentId, nodeToComponent[iterNode]);
+                    }
+
+                    iterNode = iterPredecessor;
+                    iterPredecessor = std::get<0>(foundNodes[iterPredecessor]);
+                };
+                updateComponentCost(startComponentId);
+                return true;
+                // extension here
+            };
+
+            py::print("cost:", cost);
+
+            // add next nodes to node queue and calculate cost
+            for (const auto& edge : searchGraph.getEdges(node)) {
+                int neighbor = edge.node2;
+                if (neighbor != predecessor && neighbor != node) {
+                    int neighborCost = cost + searchGraph.getMinCostEdge(neighbor, node).cost;
+                    if (foundNodes.contains(neighbor)) {
+                        py::print("neighbor", neighbor, "was found before");
+                        if (std::get<1>(foundNodes[neighbor]) > neighborCost) {
+                            py::print(std::get<1>(foundNodes[neighbor]), ">", neighborCost);
+                            foundNodes[neighbor] = { node, neighborCost };
+                        } else {
+                            py::print(std::get<1>(foundNodes[neighbor]), "<=", neighborCost);
+                            continue;
+                        };
+                    };
+                    nodeQueue.emplace(neighbor, node, neighborCost);
+                };
+            };
+        };
+
+        return false;
+    };
+
+    void search() {
+        std::set<int> ignoreNodes;
+        bool repeat = true;
+        while (repeat) {
+            int minCost = 100;
+            int minNode;
+            repeat = false;
+            for (const auto& node : searchGraph.getAllNodeIds()) {
+                if (ignoreNodes.contains(node)) {
+                    py::print(node, "was ignored");
+                    continue;
+                } else {
+                    py::print(node, "was not ignored");
+                };
+
+                int cost = std::get<1>(getLowestCostPredecessor(node));
+                if (cost < minCost) {
+                    minCost = cost;
+                    minNode = node;
+                };
+            };
+
+            handleSelfEdges();
+            if (!searchFrom(minNode)) {
+                py::print(minNode, "will be ignored");
+                ignoreNodes.insert(minNode);
+            } else {
+                ignoreNodes.clear();
+                repeat = true;
+            };
+        };
+    };
+
+    std::set<int> solve() {
+        py::print("starting initial setup");
         initialSetup();
+        py::print("finished initial setup, starting search");
+        search();
+        py::print("finished search");
 
         return multicut;
     };
