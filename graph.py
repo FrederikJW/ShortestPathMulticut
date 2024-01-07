@@ -1,5 +1,10 @@
 import random
 
+# seed_value = random.randint(1, 1000)
+seed_value = 19
+random.seed(seed_value)
+print(seed_value)
+
 import networkx as nx
 import numpy as np
 

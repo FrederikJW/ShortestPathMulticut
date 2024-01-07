@@ -11,6 +11,9 @@ from utils import generate_distinct_colors
 sys.path.append("C:/Users/FreBe/projects/ShortestPathMulticut/build/Release")
 import spm_solver
 
+sys.path.append("C:/Users/FreBe/projects/EdgeContractionMulticut/build/Release")
+from edge_contraction_solver import LargestPositiveCost
+
 # use a transaction lock to prevent drawing if the graph is changed
 drawing_lock = threading.Lock()
 
@@ -22,10 +25,31 @@ class Manager:
         self.visualizer = None
         self.visualization_thread = threading.Thread(target=self.run_visualizer)
 
-    def run_external_solver(self):
+    def run_edge_contraction_solver(self):
         self.visualization_thread.start()
 
-        graph = GraphFactory.generate_grid((20, 20))
+        graph = GraphFactory.generate_grid((10, 10))
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        input("Waiting for input")
+
+        solver = LargestPositiveCost()
+        solver.load_graph(*(graph.export()))
+        multicut = solver.solve()
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_external_spm_solver(self):
+        self.visualization_thread.start()
+
+        graph = GraphFactory.generate_grid((10, 10))
 
         while self.visualizer is None:
             time.sleep(1)
@@ -35,11 +59,13 @@ class Manager:
         search_graph = GraphFactory.generate_grid_search_graph(graph)
         visual_graph = search_graph.copy()
 
-        input("Waiting for input")
+        time.sleep(1)
+        # input("Waiting for input")
 
         self.visualizer.set_graph(visual_graph)
 
-        input("Waiting for input")
+        time.sleep(1)
+        # input("Waiting for input")
 
         solver = spm_solver.get_solver()
         solver.load_search_graph(*(search_graph.export()))
@@ -47,7 +73,8 @@ class Manager:
 
         self.visualizer.set_multicut(multicut)
 
-        input("Waiting for input")
+        time.sleep(1)
+        # input("Waiting for input")
 
         self.visualizer.set_graph(graph)
 

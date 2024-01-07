@@ -172,7 +172,17 @@ class Visualizer:
 
             cost = edge[3]["cost"]
             cut = edge[3]["id"] in self.multicut or (edge[1], edge[0], edge[2]) in self.multicut
-            color = PURPLE if cut else GREEN if cost == 1 else RED
+            if cut:
+                if cost == 1:
+                    color = LIME
+                else:
+                    color = PURPLE
+            else:
+                if cost == 1:
+                    color = GREEN
+                else:
+                    color = RED
+
             if num_edges < 1000:
                 self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
                                        self.scale_value(pos2 + pos_offset[1]),
