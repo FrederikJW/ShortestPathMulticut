@@ -9,7 +9,10 @@ manager = None
 def main():
     global manager
     manager = Manager()
-    manager.run_external_spm_solver()
+    # manager.run_external_spm_solver()
+    # manager.run_official_edge_contraction_solver()
+    # manager.run_edge_contraction_solver()
+    manager.multithreading_test()
 
 
 def on_terminate(signum, frame):

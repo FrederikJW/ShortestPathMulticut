@@ -13,6 +13,7 @@ import spm_solver
 
 sys.path.append("C:/Users/FreBe/projects/EdgeContractionMulticut/build/Release")
 from edge_contraction_solver import LargestPositiveCost
+from edge_contraction_solver import greedyAdditiveEdgeContraction
 
 # use a transaction lock to prevent drawing if the graph is changed
 drawing_lock = threading.Lock()
@@ -25,10 +26,80 @@ class Manager:
         self.visualizer = None
         self.visualization_thread = threading.Thread(target=self.run_visualizer)
 
+    def multithreading_test(self):
+        self.visualization_thread.start()
+        while self.visualizer is None:
+            time.sleep(1)
+
+        graph = GraphFactory.read_slice_from_snemi3d(50, (200, 200))
+        # graph = GraphFactory.generate_grid((30, 30))
+        self.visualizer.set_graph(graph)
+        solver = spm_solver.Solver()
+        solver.activate_track_history()
+        solver.load_graph(*(graph.export()))
+        nodes, edges, components, node_to_predecessor = solver.get_state()
+
+        graph = GraphFactory.construct_from_values(nodes, edges)
+        self.visualizer.set_graph(graph)
+        print("start solving")
+        solver_thread = threading.Thread(target=solver.solve)
+        solver_thread.start()
+
+        self.visualizer.set_history_getter(solver.get_history)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def test(self):
+        self.visualization_thread.start()
+        while self.visualizer is None:
+            time.sleep(1)
+
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+        # graph = GraphFactory.generate_grid((5, 5))
+        self.visualizer.set_graph(graph)
+
+        solver = spm_solver.Solver()
+        solver.activate_track_history()
+        solver.load_graph(*(graph.export()))
+        nodes, edges, components, node_to_predecessor = solver.get_state()
+
+        graph = GraphFactory.construct_from_values(nodes, edges)
+        self.visualizer.set_graph(graph)
+        print("finished")
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def greedy_additive_edge_contraction_test(self):
+        multicut, _ = greedyAdditiveEdgeContraction(6, [(0, 1, 5), (0, 3, -20), (1, 2, 5), (1, 4, 5), (2, 5, -20), (3, 4, 5), (4, 5, 5)])
+        print("result:")
+        print([edge_id for edge_id in multicut])
+
+    def run_official_edge_contraction_solver(self):
+        self.visualization_thread.start()
+
+        graph = GraphFactory.generate_grid((50, 50))
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        input("Waiting for input")
+
+        multicut, elapsed = greedyAdditiveEdgeContraction(*(graph.standard_export()))
+
+        print("execution Time: ", elapsed, "ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
     def run_edge_contraction_solver(self):
         self.visualization_thread.start()
 
-        graph = GraphFactory.generate_grid((10, 10))
+        graph = GraphFactory.generate_grid((50, 50))
 
         while self.visualizer is None:
             time.sleep(1)
@@ -39,7 +110,9 @@ class Manager:
 
         solver = LargestPositiveCost()
         solver.load_graph(*(graph.export()))
-        multicut = solver.solve()
+        multicut, elapsed = solver.solve()
+
+        print("execution Time: ", elapsed, "ms")
 
         self.visualizer.set_multicut(multicut)
 
@@ -49,7 +122,7 @@ class Manager:
     def run_external_spm_solver(self):
         self.visualization_thread.start()
 
-        graph = GraphFactory.generate_grid((10, 10))
+        graph = GraphFactory.generate_grid((80, 80))
 
         while self.visualizer is None:
             time.sleep(1)

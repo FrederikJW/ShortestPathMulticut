@@ -1,4 +1,6 @@
 import random
+import h5py
+from tqdm import tqdm
 
 # seed_value = random.randint(1, 1000)
 seed_value = 19
@@ -11,6 +13,51 @@ import numpy as np
 
 class GraphFactory:
     @staticmethod
+    def construct_from_values(nodes, edges):
+        graph = Graph()
+        graph.add_nodes_from([(node, {"pos": (x, y)}) for node, x, y in nodes])
+        graph.add_edges_from([(node1, node2, {"cost": cost, "id": edge_id}) for node1, node2, _, cost, edge_id in edges])
+
+        return graph
+
+    @staticmethod
+    def read_slice_from_snemi3d(slice_num, size=None):
+        graph = Graph()
+        try:
+            with h5py.File("graphs/hdf5/SNEMI3Daffinities.hdf", 'r') as file:
+                print(f"Loading graph from SNEMI3D Database from slice {slice_num}")
+                data = file['vol0'][...]
+        except IOError:
+            print("File not accessible")
+        except KeyError:
+            print("Dataset not found in the file")
+
+        num_nodes = data[0][0].size
+        col_count = data[0][0].shape[0]
+        if size is not None:
+            num_nodes = size[0] * size[1]
+            col_count = size[0]
+
+        graph.add_nodes_from([(node, {"pos": (node % col_count, node // col_count)}) for node in range(num_nodes)])
+
+        edges = []
+        i = 0
+        for node in tqdm(range(num_nodes)):
+            x = node % col_count
+            y = node // col_count
+
+            if x != 0:
+                edges.append((node, node - 1, {"cost": (data[1][slice_num][x][y] * 2) - 1, "id": i}))
+                i += 1
+            if y != 0:
+                edges.append((node, node - col_count, {"cost": (data[2][slice_num][x][y] * 2) - 1, "id": i}))
+                i += 1
+
+        graph.add_edges_from(edges)
+
+        return graph
+
+    @staticmethod
     def generate_grid(size):
         # get weights
         num_edges = 2 * size[0] * size[1] - size[0] - size[1]
@@ -22,7 +69,7 @@ class GraphFactory:
 
         # generate nodes
         graph.add_nodes_from([(node_id, {'pos': np.array((x, y))}) for node_id, (x, y) in
-                              enumerate([(x, y) for x in range(size[0]) for y in range(size[1])])])
+                              enumerate([(x, y) for y in range(size[1]) for x in range(size[0])])])
 
         # generate edges
         edges = []
@@ -58,8 +105,9 @@ class GraphFactory:
         nodes_map = dict(enumerate([(x, y) for x in range(max_x) for y in range(max_y)]))
         nodes_map_inv = {pos: node_id for node_id, pos in nodes_map.items()}
         search_graph.add_nodes_from([(node_id, {'pos': np.array((x, y))}) for node_id, (x, y) in nodes_map.items()])
-        search_graph.add_node(-1, pos=np.array((-1, -1)))
-        nodes_map_inv[(-1, -1)] = -1
+        outside_node_id = search_graph.number_of_nodes()
+        search_graph.add_node(outside_node_id, pos=np.array((-1, -1)))
+        nodes_map_inv[(-1, -1)] = outside_node_id
 
         num_nodes = len(graph.nodes)
         for node1 in range(num_nodes):
@@ -155,7 +203,16 @@ class Graph(nx.MultiGraph):
         return new_node
 
     def export(self):
-        nodes = [(node_id, 0, 0) for node_id in self.nodes]
+        nodes = [(node[0], node[1][0], node[1][1]) for node in self.nodes(data="pos")]
         edges = [(node1, node2, key, data.get("cost"), data.get("id")) for node1, node2, key, data in
                  self.edges(data=True, keys=True)]
         return nodes, edges
+
+    def standard_export(self):
+        nodes = self.number_of_nodes()
+        edges = [(node1, node2, data.get("cost"), data.get("id")) for node1, node2, data in self.edges(data=True)]
+        edges.sort(key=lambda x: x[3])
+        edges = [(node1, node2, cost) for node1, node2, cost, _ in edges]
+
+        return nodes, edges
+

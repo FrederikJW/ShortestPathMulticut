@@ -1,5 +1,6 @@
 import math
 import sys
+import time
 from typing import Union
 
 import numpy as np
@@ -18,6 +19,13 @@ class Visualizer:
         self.drawing_lock = drawing_lock
         self.is_search_graph = False
         self.draw_necessary = False
+        self.edge_colors = {}
+        self.search_edge_colors = {}
+
+        self.history_getter = None
+        self.current_history = (0, 0)
+        self.history_mode = False
+        self.animation_time_progress = None
 
         # setup pygame
         pygame.init()
@@ -65,8 +73,12 @@ class Visualizer:
                     self.draw_necessary = True
 
             if self.graph is not None:
+                if self.draw_necessary or self.history_mode:
+                    if self.history_mode:
+                        current_time = time.time()
+                        while self.animation_time_progress < current_time:
+                            self.set_edge_color_for_history()
 
-                if self.draw_necessary:
                     self.surface.fill(COLOR_KEY)
 
                     with self.drawing_lock:
@@ -90,10 +102,88 @@ class Visualizer:
             self.is_search_graph = self.graph.has_node(-1)
             self.set_scale()
             self.draw_necessary = True
+            self.calculate_edge_colors()
+
+    def calculate_edge_colors(self):
+        num_edges = len(self.graph.edges)
+        cut_negative_color = PURPLE
+        non_cut_negative_color = RED
+        cut_positive_color = LIME
+        non_cut_positive_color = GREEN
+
+        if num_edges > 10:
+            cut_negative_color = RED
+            non_cut_negative_color = GREY
+            cut_positive_color = RED
+            non_cut_positive_color = None
+
+        for edge in self.graph.edges(keys=True, data=True):
+            cost = edge[3]["cost"]
+            cut = edge[3]["id"] in self.multicut or (edge[1], edge[0], edge[2]) in self.multicut
+
+            if cut:
+                if cost > 0:
+                    color = cut_positive_color
+                else:
+                    color = cut_negative_color
+            else:
+                if cost > 0:
+                    color = non_cut_positive_color
+                else:
+                    color = non_cut_negative_color
+            self.edge_colors[edge[3]["id"]] = color
 
     def set_multicut(self, multicut):
         self.multicut = multicut
         self.draw_necessary = True
+
+    def set_history_getter(self, history_getter):
+        self.history_mode = True
+        self.history_getter = history_getter
+        self.animation_time_progress = time.time()
+
+    def get_history(self):
+        if self.history_getter is None:
+            return None
+        return self.history_getter()
+
+    def set_edge_color_for_history(self):
+        self.animation_time_progress += 0.01
+        history = self.get_history()
+        if len(history) == 0:
+            return
+        major_history = self.current_history[0]
+        minor_history = self.current_history[1]
+        current_history_state = history[major_history]
+
+        minor_history += 1
+        if minor_history > len(current_history_state[0]):
+            self.search_edge_colors = {}
+            if major_history == len(history) - 1:
+                return
+            major_history += 1
+            minor_history = 0
+
+        self.current_history = (major_history, minor_history)
+
+        if minor_history == 0 and major_history > 0:
+            current_history_state = history[major_history - 1]
+
+            for edge in current_history_state[1]:
+                # cuts
+                self.edge_colors[edge] = RED
+            for edge in current_history_state[2]:
+                # paths
+                self.edge_colors[edge] = DARK_GREY
+        else:
+            edge = current_history_state[0][minor_history - 1]
+            self.search_edge_colors[edge] = GREEN
+
+    def get_edge_color(self, edge_id):
+        color = self.search_edge_colors.get(edge_id, None)
+        if color is None:
+            color = self.edge_colors[edge_id]
+        return color
 
     def set_scale(self):
         if self.graph is None:
@@ -163,41 +253,33 @@ class Visualizer:
         for edge in self.graph.edges(keys=True, data=True):
             pos1 = self.graph.nodes[edge[0]]['pos']
             pos2 = self.graph.nodes[edge[1]]['pos']
-            if edge[1] == -1:
+            if pos2[0] < 0 and pos2[1] < 0:
                 positions = self.get_outside_pos(pos1, max_x, max_y)
                 pos2 = positions[0]
                 if tuple(pos2) in outside_positions:
                     pos2 = positions[1]
                 outside_positions.append(tuple(pos2))
 
-            cost = edge[3]["cost"]
-            cut = edge[3]["id"] in self.multicut or (edge[1], edge[0], edge[2]) in self.multicut
-            if cut:
-                if cost == 1:
-                    color = LIME
-                else:
-                    color = PURPLE
-            else:
-                if cost == 1:
-                    color = GREEN
-                else:
-                    color = RED
+            color = self.get_edge_color(edge[3]["id"])
 
-            if num_edges < 1000:
-                self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
-                                       self.scale_value(pos2 + pos_offset[1]),
-                                       color,
-                                       edge_width)
-            else:
-                pygame.draw.line(self.surface, color,
-                                 self.scale_value(pos1 + pos_offset[0]),
-                                 self.scale_value(pos2 + pos_offset[1]))
+            if color is not None:
+                if num_edges < 1000:
+                    self.draw_thick_aaline(self.scale_value(pos1 + pos_offset[0]),
+                                           self.scale_value(pos2 + pos_offset[1]),
+                                           color,
+                                           edge_width)
+                else:
+                    pygame.draw.line(self.surface, color,
+                                     self.scale_value(pos1 + pos_offset[0]),
+                                     self.scale_value(pos2 + pos_offset[1]))
 
         if node_radius < 5:
             return
         # draw nodes
+        outside_node = 0
         for node, data in self.graph.nodes(data=True):
-            if node == -1:
+            if data["pos"][0] < 0 and data["pos"][1]:
+                outside_node = node
                 continue
             pos = tuple(self.scale_value(data["pos"] + pos_offset))
             color = data.get("color", DARK_BLUE)
@@ -213,7 +295,7 @@ class Visualizer:
 
         # draw outside nodes
         if self.is_search_graph:
-            data = self.graph.nodes[-1]
+            data = self.graph.nodes[outside_node]
             cost = data.get("cost", 0)
             color = data.get("color", DARK_BLUE)
 

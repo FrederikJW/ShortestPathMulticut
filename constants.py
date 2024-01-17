@@ -7,6 +7,8 @@ GRAPH_EDGE_WIDTH = 0.05
 
 # colors
 WHITE = (255, 255, 255)
+GREY = (171, 171, 171)
+DARK_GREY = (105, 105, 105)
 BLACK = (0, 0, 0)
 RED = (234, 76, 137)
 GREEN = (76, 175, 80)
