@@ -10,6 +10,8 @@ from pygame import gfxdraw
 from constants import *
 from graph import Graph
 
+from tqdm import tqdm
+
 
 class Visualizer:
     def __init__(self, drawing_lock):
@@ -24,8 +26,10 @@ class Visualizer:
 
         self.history_getter = None
         self.current_history = (0, 0)
+        self.history = []
         self.history_mode = False
         self.animation_time_progress = None
+        self.redraw_edges = set()
 
         # setup pygame
         pygame.init()
@@ -37,7 +41,8 @@ class Visualizer:
         pygame.display.set_caption("Shortest Path Multicut")
         self.screen.fill(WHITE)
         self.surface = pygame.Surface(self.screen_size)
-        self.surface.fill(WHITE)
+        self.surface.fill(COLOR_KEY)
+        self.surface.set_colorkey(COLOR_KEY)
 
         # setup text
         self.font = pygame.font.SysFont('Ariel', 32)
@@ -69,6 +74,7 @@ class Visualizer:
                     self.screen_size = event.dict['size']
                     self.surface = pygame.Surface(self.screen_size)
                     self.surface.fill(COLOR_KEY)
+                    self.surface.set_colorkey(COLOR_KEY)
                     self.set_scale()
                     self.draw_necessary = True
 
@@ -84,7 +90,8 @@ class Visualizer:
                     with self.drawing_lock:
                         self.draw_graph()
 
-                    self.screen.fill(WHITE)
+                    if self.draw_necessary:
+                        self.screen.fill(WHITE)
                     self.screen.blit(self.surface, (0, 0))
                     self.draw_necessary = False
 
@@ -135,20 +142,49 @@ class Visualizer:
 
     def set_multicut(self, multicut):
         self.multicut = multicut
+        for edge_id in multicut:
+            self.edge_colors[edge_id] = RED
         self.draw_necessary = True
 
-    def set_history_getter(self, history_getter):
+    def set_history_file(self, filename):
+        print("read history file")
+        self.history = []
+        with open(filename, "r") as file:
+            lines = [line.strip() for line in file]
+            for line in tqdm(lines):
+                line_list = line.split(';')
+                if len(line_list) != 3:
+                    print("history file corrupted")
+                    break
+                search_history, cut, merge = line_list
+
+                if len(search_history) > 0:
+                    search_history = list(map(int, search_history.split(',')))
+                else:
+                    search_history = []
+                if len(cut) > 0:
+                    cut = list(map(int, cut.split(',')))
+                else:
+                    cut = []
+                if len(merge) > 0:
+                    merge = list(map(int, merge.split(',')))
+                else:
+                    merge = []
+
+                self.history.append((search_history, cut, merge))
+
         self.history_mode = True
-        self.history_getter = history_getter
+        # self.history_getter = history_getter
         self.animation_time_progress = time.time()
 
     def get_history(self):
-        if self.history_getter is None:
-            return None
-        return self.history_getter()
+        # if self.history_getter is None:
+        #     return None
+        # return self.history_getter()
+        return self.history
 
     def set_edge_color_for_history(self):
-        self.animation_time_progress += 0.01
+        self.animation_time_progress += 0.0001
         history = self.get_history()
         if len(history) == 0:
             return
@@ -159,6 +195,7 @@ class Visualizer:
         minor_history += 1
         if minor_history > len(current_history_state[0]):
             self.search_edge_colors = {}
+            self.draw_necessary = True
             if major_history == len(history) - 1:
                 return
             major_history += 1
@@ -178,6 +215,7 @@ class Visualizer:
         else:
             edge = current_history_state[0][minor_history - 1]
             self.search_edge_colors[edge] = GREEN
+            self.redraw_edges.add(edge)
 
     def get_edge_color(self, edge_id):
         color = self.search_edge_colors.get(edge_id, None)
@@ -251,6 +289,9 @@ class Visualizer:
 
         # draw edges
         for edge in self.graph.edges(keys=True, data=True):
+            if not self.draw_necessary and edge[3]["id"] not in self.redraw_edges:
+                continue
+
             pos1 = self.graph.nodes[edge[0]]['pos']
             pos2 = self.graph.nodes[edge[1]]['pos']
             if pos2[0] < 0 and pos2[1] < 0:
@@ -272,6 +313,11 @@ class Visualizer:
                     pygame.draw.line(self.surface, color,
                                      self.scale_value(pos1 + pos_offset[0]),
                                      self.scale_value(pos2 + pos_offset[1]))
+
+        self.redraw_edges = set()
+
+        if not self.draw_necessary:
+            return
 
         if node_radius < 5:
             return

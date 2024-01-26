@@ -26,12 +26,28 @@ class Manager:
         self.visualizer = None
         self.visualization_thread = threading.Thread(target=self.run_visualizer)
 
+    def test_visualizer(self):
+        self.visualization_thread.start()
+        while self.visualizer is None:
+            time.sleep(1)
+
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+        self.visualizer.set_graph(graph)
+        solver = spm_solver.Solver()
+        solver.activate_track_history()
+        solver.load_graph(*(graph.export()))
+        nodes, edges, components, node_to_predecessor = solver.get_state()
+        graph = GraphFactory.construct_from_values(nodes, edges)
+        self.visualizer.set_graph(graph)
+
+        self.visualizer.set_history_file("2024-01-24_16-29-39.txt")
+
     def multithreading_test(self):
         self.visualization_thread.start()
         while self.visualizer is None:
             time.sleep(1)
 
-        graph = GraphFactory.read_slice_from_snemi3d(50, (200, 200))
+        graph = GraphFactory.read_slice_from_snemi3d(3)
         # graph = GraphFactory.generate_grid((30, 30))
         self.visualizer.set_graph(graph)
         solver = spm_solver.Solver()
@@ -45,7 +61,7 @@ class Manager:
         solver_thread = threading.Thread(target=solver.solve)
         solver_thread.start()
 
-        self.visualizer.set_history_getter(solver.get_history)
+        # self.visualizer.set_history_getter(solver.get_history)
 
         while self.visualization_thread.is_alive():
             time.sleep(1)
@@ -113,6 +129,36 @@ class Manager:
         multicut, elapsed = solver.solve()
 
         print("execution Time: ", elapsed, "ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_parallel_spm_solver(self):
+        self.visualization_thread.start()
+
+        # graph = GraphFactory.generate_grid((60, 60))
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        input("Waiting for input")
+
+        solver = spm_solver.Solver()
+        solver.activate_track_history()
+        solver.load_graph(*(graph.export()))
+        nodes, edges, components, node_to_predecessor = solver.get_state()
+        graph = GraphFactory.construct_from_values(nodes, edges)
+
+        self.visualizer.set_graph(graph)
+
+        multicut = solver.parallel_search_solve()
+
+        input("Waiting for input")
 
         self.visualizer.set_multicut(multicut)
 
