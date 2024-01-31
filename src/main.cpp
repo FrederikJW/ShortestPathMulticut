@@ -21,8 +21,10 @@ namespace py = pybind11;
 
 const bool debug = false;
 
+const double MAX_DOUBLE = std::numeric_limits<double>::max();
+
 struct TupleComparator {
-    bool operator()(const std::tuple<int, int, float>& lhs, const std::tuple<int, int, float>& rhs) const {
+    bool operator()(const std::tuple<int, int, double>& lhs, const std::tuple<int, int, double>& rhs) const {
         return std::get<2>(lhs) < std::get<2>(rhs);
     }
 };
@@ -32,11 +34,11 @@ struct Edge {
     int node1;
     int node2;
     int key;
-    float cost;
+    double cost;
     int id;
 
     Edge() : node1(0), node2(0), key(0), cost(0), id(0) {};
-    Edge(int n1, int n2, int k, float c, int i) : node1(n1), node2(n2), key(k), cost(c), id(i) {};
+    Edge(int n1, int n2, int k, double c, int i) : node1(n1), node2(n2), key(k), cost(c), id(i) {};
 };
 
 // Node structure to store color
@@ -67,13 +69,13 @@ public:
     };
 
     // Function to add an edge with a specified cost
-    void addEdge(int v1, int v2, int key, float cost, int id) {
+    void addEdge(int v1, int v2, int key, double cost, int id) {
         adjacencyList[v1][v2][key] = Edge(v1, v2, key, cost, id);
         adjacencyList[v2][v1][key] = Edge(v2, v1, key, cost, id);
         allEdges[id] = Edge(v1, v2, key, cost, id);
     };
 
-    void addEdge(int v1, int v2, float cost, int id) {
+    void addEdge(int v1, int v2, double cost, int id) {
         auto keyToEdge = adjacencyList[v1][v2];
         int newKey = 0;
         for (const auto& pair : keyToEdge) {
@@ -141,7 +143,7 @@ public:
 
     Edge getMinCostEdge(int node1, int node2) {
         std::optional<Edge> edge;
-        float minCost = 100;
+        double minCost = MAX_DOUBLE;
         for (const auto& pair : adjacencyList[node1][node2]) {
             if (pair.second.cost < minCost) {
                 edge = pair.second;
@@ -157,7 +159,7 @@ public:
 
     Edge getMinCostEdge(int node1, int node2, std::set<int> exceptEdges) {
         std::optional<Edge> edge;
-        float minCost = 100;
+        double minCost = MAX_DOUBLE;
         for (const auto& pair : adjacencyList[node1][node2]) {
             if (pair.second.cost < minCost) {
                 // filter out edges from exceptEdges
@@ -241,9 +243,9 @@ public:
         return newNode;
     };
 
-    std::tuple<std::vector<std::tuple<int, int, int>>, std::vector<std::tuple<int, int, int, float, int>>> export_() {
+    std::tuple<std::vector<std::tuple<int, int, int>>, std::vector<std::tuple<int, int, int, double, int>>> export_() {
         std::vector<std::tuple<int, int, int>> nodes;
-        std::vector<std::tuple<int, int, int, float, int>> edges;
+        std::vector<std::tuple<int, int, int, double, int>> edges;
 
         for (const auto& pair : allNodes) {
             nodes.push_back({ pair.second.id, pair.second.posx, pair.second.posy });
@@ -263,7 +265,7 @@ private:
     Graph searchGraph;
     std::map<int, int> nodeToComponent;
     std::map<int, std::set<int>> components;
-    std::map<int, std::map<int, float>> nodeToPredecessor;
+    std::map<int, std::map<int, double>> nodeToPredecessor;
     std::set<int> multicut;
     std::vector<int> searchHistory;
     std::vector<int> madeCut;
@@ -271,14 +273,17 @@ private:
     std::vector<std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>> fullHistory;
     mutable std::mutex mtx;
     bool trackHistory;
-    float score;
+    double score;
     std::ofstream file;
     std::string filename;
+    std::map<int, int> componentAge;
+    int nextComponentId;
 
 
 public:
     Solver() {
         trackHistory = false;
+        nextComponentId = -1;
     };
 
     void activateTrackHistory() {
@@ -328,7 +333,7 @@ public:
         };
     };
 
-    void loadGraph(const std::vector<std::tuple<int, int, int>>& nodes, const std::vector<std::tuple<int, int, int, float, int>>& edges) {
+    void loadGraph(const std::vector<std::tuple<int, int, int>>& nodes, const std::vector<std::tuple<int, int, int, double, int>>& edges) {
         py::print("loading graph");
 
         for (const auto& node : nodes) {
@@ -342,7 +347,7 @@ public:
         buildSearchGraph();
     };
 
-    void loadSearchGraph(const std::vector<std::tuple<int, int, int>>& nodes, const std::vector<std::tuple<int, int, int, float, int>>& edges) {
+    void loadSearchGraph(const std::vector<std::tuple<int, int, int>>& nodes, const std::vector<std::tuple<int, int, int, double, int>>& edges) {
         py::print("loading search graph");
 
         for (const auto& node : nodes) {
@@ -405,14 +410,17 @@ public:
     };
 
     int getNewComponentId() {
-        auto it = components.rbegin();
-        int greatestKey = (it != components.rend()) ? it->first : 0;
-        return greatestKey + 1;
+        if (nextComponentId == -1) {
+            auto it = components.rbegin();
+            int greatestKey = (it != components.rend()) ? it->first : 0;
+            nextComponentId = greatestKey + 1;
+        }
+        return nextComponentId++;
     };
 
-    std::tuple<int, float> getLowestCostPredecessor(int node) {
+    std::tuple<int, double> getLowestCostPredecessor(int node) {
         int minCostPredecessor = node;
-        float minCost = 0.0;
+        double minCost = 0;
 
         for (const auto& [predecessor, cost] : nodeToPredecessor[node]) {
             if (node == predecessor) continue;
@@ -425,9 +433,9 @@ public:
         return {minCostPredecessor, minCost};
     };
 
-    std::tuple<int, float> getLowestCostPredecessor(int node, int exceptNode) {
+    std::tuple<int, double> getLowestCostPredecessor(int node, int exceptNode) {
         int minCostPredecessor;
-        float minCost = 0.0;
+        double minCost = 0;
 
         for (const auto& [predecessor, cost] : nodeToPredecessor[node]) {
             if (node == predecessor) continue;
@@ -446,7 +454,7 @@ public:
 
         for (const Edge& edge : searchGraph.getAllEdges()) {
             if (edge.node1 == edge.node2) {
-                if (edge.cost < 0.0) {
+                if (edge.cost < 0) {
                     multicut.insert(edge.id);
                     score += edge.cost;
                     py::print("score:", score);
@@ -476,7 +484,7 @@ public:
         std::queue<std::tuple<int, int>> nodeQueue;
         for (const auto& startNode : startNodes) {
             // py::print("start from node:", startNode);
-            std::set<int> visitedNodes;
+            // std::set<int> visitedNodes;
 
             nodeQueue = std::queue<std::tuple<int, int>>();
             int predecessor = startNode;
@@ -489,19 +497,21 @@ public:
 
                 // py::print("update:", currentNode, predecessor, nodeToComponent[currentNode]);
                 
+                /*
                 if (nodeToComponent[currentNode] != componentId) {
                     throw std::runtime_error(std::to_string(currentNode) + " is in component " + std::to_string(nodeToComponent[currentNode]) + " but is connected to component " + std::to_string(componentId));
                 };
+                */
 
                 if (currentNode == predecessor) continue;
 
                 
-                if (visitedNodes.contains(currentNode)) throw std::runtime_error("Found cycle. Node " + std::to_string(currentNode) + " has been visited before.");
-                visitedNodes.insert(currentNode);
+                // if (visitedNodes.contains(currentNode)) throw std::runtime_error("Found cycle. Node " + std::to_string(currentNode) + " has been visited before.");
+                // visitedNodes.insert(currentNode);
                 
 
-                float predecessorCost = std::get<1>(getLowestCostPredecessor(predecessor, currentNode));
-                float edgeCost = searchGraph.getMinCostEdge(currentNode, predecessor).cost;
+                double predecessorCost = std::get<1>(getLowestCostPredecessor(predecessor, currentNode));
+                double edgeCost = searchGraph.getMinCostEdge(currentNode, predecessor).cost;
 
                 nodeToPredecessor[currentNode][predecessor] = predecessorCost + edgeCost;
 
@@ -513,19 +523,44 @@ public:
         };
     };
 
-    std::tuple<std::vector<std::tuple<int, Edge>>, float> findPath(int startNode, int endNode) {
+    void updateComponentCostInDirection(int componentId, int node1, int node2) {
+        std::queue<std::tuple<int, int>> nodeQueue;
+        nodeQueue.push({ node2, node1 });
+        double predecessorCost, edgeCost, oldCost, newCost;
+        while (!nodeQueue.empty()) {
+            auto [currentNode, predecessor] = nodeQueue.front();
+            nodeQueue.pop();
+
+            if (currentNode == predecessor) continue;
+
+            predecessorCost = std::get<1>(getLowestCostPredecessor(predecessor, currentNode));
+            edgeCost = searchGraph.getMinCostEdge(currentNode, predecessor).cost;
+
+            newCost = predecessorCost + edgeCost;
+            oldCost = nodeToPredecessor[currentNode][predecessor];
+
+            if (newCost == oldCost) continue;
+            nodeToPredecessor[currentNode][predecessor] = newCost;
+
+            for (const auto& pair : nodeToPredecessor[currentNode]) {
+                if (pair.first == predecessor) continue;
+                nodeQueue.push({ pair.first, currentNode });
+            };
+        };
+    };
+
+    std::tuple<std::vector<std::tuple<int, Edge>>, double> findPath(int startNode, int endNode) {
         if (debug) py::print("finding path from ", startNode, " to ", endNode);
 
         if (startNode == endNode) {
             std::vector<std::tuple<int, Edge>> emptyPath;
-            float cost = 0.0;
-            return { emptyPath, cost };
+            return { emptyPath, 0 };
         };
 
         std::map<int, Edge> predecessors;
-        std::vector<std::tuple<int, float>> nodeQueue;
+        std::vector<std::tuple<int, double>> nodeQueue;
         auto currentNode = startNode;
-        float cost = 0.0;
+        double cost = 0;
         std::set<int> foundEdges;
         std::set<int> foundNodes;
         foundNodes.insert(startNode);
@@ -538,7 +573,7 @@ public:
 
                 Edge minEdge = searchGraph.getMinCostEdge(currentNode, neighbor, foundEdges);
 
-                float totalNeighborCost = cost + minEdge.cost;
+                double totalNeighborCost = cost + minEdge.cost;
                 predecessors[neighbor] = minEdge;
 
                 // mark edge as 
@@ -575,10 +610,10 @@ public:
         throw std::runtime_error("findPath expected to find a path, but no path was found.");
     };
 
-    void handleCycle(std::vector<std::tuple<int, Edge>> cycle, bool createComponent = true) {
+    int handleCycle(std::vector<std::tuple<int, Edge>> cycle, bool createComponent = true) {
         if (debug) py::print("handling cycle:");
 
-        float cutScore = 0.0;
+        double cutScore = 0;
 
         // remove cut edges from graph and add them to the multicut
         for (const auto& [node, edge] : cycle) {
@@ -590,7 +625,7 @@ public:
             cutScore += edge.cost;
         };
 
-        if (cutScore > 0.0) {
+        if (cutScore > 0) {
             py::print(cutScore);
             throw std::runtime_error("cutScore is greater than zero");
         };
@@ -636,8 +671,8 @@ public:
                 if (cycleNodesSet.contains(neighbour)) continue;
                 nodeToPredecessor[neighbour].erase(cycleNode);
                 if (createComponent) {
-                    nodeToPredecessor[neighbour][newNode] = 0.0;
-                    nodeToPredecessor[newNode][neighbour] = 0.0;
+                    nodeToPredecessor[neighbour][newNode] = 0;
+                    nodeToPredecessor[newNode][neighbour] = 0;
                 };
             };
             nodeToPredecessor.erase(cycleNode);
@@ -649,6 +684,8 @@ public:
         py::print("handling self edges");
         handleSelfEdges();
 
+        py::print("finished handling cycle");
+
         if (createComponent) {
             nonCycleNodesSet.insert(newNode);
             int newComponentId = getNewComponentId();
@@ -659,15 +696,15 @@ public:
             };
             // validateState();
             updateComponentCost(newComponentId);
+            return newComponentId;
         } else {
             // reset all variables
             // this could be optimized
             nodeToComponent.clear();
             nodeToPredecessor.clear();
             components.clear();
+            return -1;
         };
-
-        py::print("finished handling cycle");
     };
 
     void initialSetup() {
@@ -696,6 +733,7 @@ public:
                 int newComponentId = getNewComponentId();
                 components[newComponentId] = newComponent;
                 nodeToComponent[nodeId] = newComponentId;
+                componentAge[newComponentId] = 0;
 
                 // add all nodes to component that have negative cost
                 std::map<int, int> previousSearchedNodes;
@@ -741,8 +779,8 @@ public:
 
                             previousSearchedNodes[newNode] = unsearchedNode;
 
-                            nodeToPredecessor[newNode][unsearchedNode] = 0.0;
-                            nodeToPredecessor[unsearchedNode][newNode] = 0.0;
+                            nodeToPredecessor[newNode][unsearchedNode] = 0;
+                            nodeToPredecessor[unsearchedNode][newNode] = 0;
 
                             // add node to component
                             newComponent.insert(newNode);
@@ -774,10 +812,10 @@ public:
         components.erase(swallowee);
     };
 
-    // cost, node, start node
-    typedef std::tuple<float, int, int> node_tuple;
+    // cost, node, start node, component, age
+    typedef std::tuple<double, int, int, int, int> node_tuple;
 
-    bool searchParallel() {
+    bool searchParallel(bool allowCuts = true) {
         // initialize priority queue with all nodes with negative cost
         // save for every node in priority queue: full cost, node, start node
         // save distances for every node
@@ -792,85 +830,100 @@ public:
         };
 
         std::priority_queue<node_tuple, std::vector<node_tuple>, std::greater<node_tuple>> priorityQueue;
-        int maxNodes = searchGraph.getMaxNodeId() + 1;
+        int maxNodes = (searchGraph.getMaxNodeId() + 1) * 2;
 
         // totalCost optimal from that node
-        std::vector<float> costVec(maxNodes, INT_MAX);
+        std::vector<double> costVec(maxNodes, INT_MAX);
 
         // distance to startNode
-        std::vector<float> dist(maxNodes, INT_MAX);
+        std::vector<double> dist(maxNodes, INT_MAX);
         // predecessor in search
         std::vector<int> pred(maxNodes, -1);
         // start node from where the node is reached
         std::vector<int> start(maxNodes, -1);
 
-        std::vector<bool> visited(maxNodes, false);
+        // std::vector<bool> visited(maxNodes, false);
+
+        std::vector<int> fromComponent(maxNodes, -1);
+
+        std::vector<int> nodeAge(maxNodes, -1);
 
         // for node in nodes with negative cost
         // initialize vectors and priority queue
         for (const auto node : searchGraph.getAllNodeIds()) {
-            float cost = std::get<1>(getLowestCostPredecessor(node));
+            double cost = std::get<1>(getLowestCostPredecessor(node));
             // initialize all nodes part from a bigger component
             if (nodeToPredecessor[node].size() > 0) {
                 // py::print("initial priority queue push: ", cost, node, node);
-                priorityQueue.push({ cost, node, node });
+                int component = nodeToComponent[node];
+                priorityQueue.push({ cost, node, node, component, componentAge[component]});
                 costVec[node] = cost;
-                dist[node] = 0.0;
+                dist[node] = 0;
                 pred[node] = node;
                 start[node] = node;
+                fromComponent[node] = component;
+                nodeAge[node] = componentAge[component];
             };
         };
 
+        bool fullContinue = false;
+
         // think of end statement, maybe end when cost reached 0 or never add cost with 0 and end when priotityqueue is empty e.g. !priority_queue.empty()
         while (!priorityQueue.empty()) {
-            auto [cost, node, nodeStartNode] = priorityQueue.top();
-            float nodeDist = dist[node];
+            auto [cost, node, nodeStartNode, nodeComponent, nodeComponentAge] = priorityQueue.top();
             priorityQueue.pop();
 
-            if (visited[node]) continue;
-            visited[node] = true;
+            if (nodeComponentAge < componentAge[nodeComponent]) continue;
+            double nodeDist = dist[node];
 
-            //py::print("searching from", node, nodeStartNode);
+            // if (cost > costVec[node] || cost > dist[node] + costVec[nodeStartNode] || nodeStartNode != start[node]) continue;
+            // visited[node] = true;
+
+            // py::print("searching from", node, nodeStartNode, nodeComponent, nodeComponentAge, componentAge[nodeComponent]);
 
             // check all connected nodes via positive edges
             for (const auto& edge : searchGraph.getEdges(node)) {
-                if (edge.cost > 0.0) {
+                if (edge.cost > 0) {
                     int newNode = edge.node2;
+                    int newNodeAge = nodeAge[newNode];
                     //py::print("check node", newNode);
-                    float newCost = edge.cost + cost;
-                    float newDist = edge.cost + nodeDist;
+                    double newCost = edge.cost + cost;
+                    double newDist = edge.cost + nodeDist;
 
                     int newNodeStartNode = start[newNode];
 
                     // check if node is connected with newNode in component (if there are multiple edges between these nodes, this is too resctrictive)
                     if (nodeToPredecessor[node].count(newNode) > 0) continue;
 
-                    // check if node is known
-                    if (newNodeStartNode != -1 && nodeStartNode != newNodeStartNode) {
+                    // check if node is known and if the cost is not outdated
+                    if (newNodeAge >= componentAge[fromComponent[newNode]]) {
                         // found path or cycle
                         int nodeComponent = nodeToComponent[nodeStartNode];
                         int newNodeComponent = nodeToComponent[newNodeStartNode];
                         if (nodeComponent == newNodeComponent) {
+                            if (!allowCuts) continue;
                             // found cycle
                             auto [path, cost] = findPath(nodeStartNode, newNodeStartNode);
 
                             // ignore cycle if cost is greater or equal to zero
-                            if (cost + newDist + dist[newNode] >= 0.0) continue;
+                            if (cost + newDist + dist[newNode] >= 0) continue;
 
-                            py::print("found cycle at", newNode);
+                            // py::print("found cycle at", newNode);
                             // handle cycle
                             int iterNode = node;
                             int iterPredecessor = pred[node];
 
                             // add path from node to nodeStartNode
                             int i = 0;
-                            while (iterNode != nodeStartNode) {
+                            
+                            while (iterNode != iterPredecessor) {
                                 /*
                                 if (nodeToPredecessor[iterNode].size() > 0) {
                                     throw std::runtime_error("node " + std::to_string(iterNode) + " has predecessors, but is part of a search path");
                                 }*/
                                 Edge edge = searchGraph.getMinCostEdge(iterNode, iterPredecessor);
                                 path.insert(path.begin() + i++, { iterNode, edge });
+                                componentAge[nodeToComponent[iterNode]]++;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
@@ -880,7 +933,7 @@ public:
                             iterPredecessor = pred[newNode];
                             Edge edge = searchGraph.getMinCostEdge(newNode, node);
                             i = 0;
-                            while (iterNode != newNodeStartNode) {
+                            while (iterNode != iterPredecessor) {
                                 /*
                                 if (nodeToPredecessor[iterNode].size() > 0) {
                                     py::print(iterNode, pred[iterNode], start[iterNode]);
@@ -889,17 +942,57 @@ public:
                                 }*/
                                 path.insert(path.end() - i++, { iterNode, edge });
                                 edge = searchGraph.getMinCostEdge(iterPredecessor, iterNode);
+                                componentAge[nodeToComponent[iterNode]]++;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
                             path.insert(path.end() - i++, { iterNode, edge });
+                            /*
+                            py::print("component age:", nodeComponent, componentAge[nodeComponent]);
+                            auto it = components.find(nodeComponent);
+                            if (it == components.end()) {
+                                py::print("component", nodeComponent, "is not in components.");
+                            }
+                            else {
+                                py::print(components[nodeComponent].size());
+                            }*/
 
-                            handleCycle(path);
+                            int newComponent = handleCycle(path);
+                            
+                            componentAge[nodeComponent]++;
+
+                            /*
+                            py::print("component age:", nodeComponent, componentAge[nodeComponent]);
+                            it = components.find(nodeComponent);
+                            if (it == components.end()) {
+                                py::print("component", nodeComponent, "is not in components.");
+                            }
+                            else {
+                                py::print(components[nodeComponent].size());
+                            }*/
+                            
+                            componentAge[newComponent] = 0;
+
+                            // py::print("new component age:", newComponent, componentAge[newComponent]);
+
+                            for (const auto node : components[newComponent]) {
+                                double cost = std::get<1>(getLowestCostPredecessor(node));
+                                priorityQueue.push({ cost, node, node, newComponent, 0 });
+                                costVec[node] = cost;
+                                dist[node] = 0;
+                                pred[node] = node;
+                                start[node] = node;
+                                fromComponent[node] = newComponent;
+                                nodeAge[node] = 0;
+                            };
+
+                            // py::print("component age:", nodeComponent, componentAge[nodeComponent]);
 
                             // think about what happens after cycle was cut, maybe restart?
-                            return true;
+                            fullContinue = true;
+                            break;
                         } else {
-                            py::print("found path at", newNode);
+                            // py::print("found path at", newNode);
                             /*
                             if (nodeToPredecessor[newNodeStartNode].size() == 0 || nodeToPredecessor[nodeStartNode].size() == 0) {
                                 py::print(newNodeStartNode);
@@ -912,14 +1005,23 @@ public:
 
                             // found path between two components
 
-                            nodeToPredecessor[node][newNode] = 0.0;
-                            nodeToPredecessor[newNode][node] = 0.0;
+                            nodeToPredecessor[node][newNode] = 0;
+                            nodeToPredecessor[newNode][node] = 0;
+                            // py::print("node, newNode:", node, newNode);
                             if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(node, newNode).id);
 
                             // add nodes between node and nodeStartNode
                             int iterNode = node;
                             int iterPredecessor = pred[node];
-                            while (iterNode != nodeStartNode) {
+                            int node1 = node;
+                            int node2 = newNode;
+                            int node3 = newNode;
+                            int node4 = node;
+                            int iterNodeComponent;
+                            // py::print("path node to start node:", node, nodeStartNode);
+                            // in rare cases this loop will not end at the newNodeStartNode, but earlier
+                            while (iterNode != iterPredecessor) {
+                                // py::print(iterNode, iterPredecessor);
                                 if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(iterNode, iterPredecessor).id);
 
                                 /*
@@ -927,12 +1029,16 @@ public:
                                     throw std::runtime_error("path is not a path");
                                 }*/
 
-                                nodeToPredecessor[iterNode][iterPredecessor] = 0.0;
-                                nodeToPredecessor[iterPredecessor][iterNode] = 0.0;
-                                if (nodeComponent != nodeToComponent[iterNode]) {
-                                    mergeComponents(nodeComponent, nodeToComponent[iterNode]);
+                                nodeToPredecessor[iterNode][iterPredecessor] = 0;
+                                nodeToPredecessor[iterPredecessor][iterNode] = 0;
+                                iterNodeComponent = nodeToComponent[iterNode];
+                                if (nodeComponent != iterNodeComponent) {
+                                    componentAge[iterNodeComponent]++;
+                                    mergeComponents(nodeComponent, iterNodeComponent);
                                 };
 
+                                node1 = iterPredecessor;
+                                node2 = iterNode;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
@@ -940,7 +1046,10 @@ public:
                             // add nodes between newNode and newNodeStartNode
                             iterNode = newNode;
                             iterPredecessor = pred[newNode];
-                            while (iterNode != newNodeStartNode) {
+                            // py::print("path newNode to newNodeStartNode:");
+                            // in rare cases this loop will not end at the newNodeStartNode, but earlier
+                            while (iterNode != iterPredecessor) {
+                                // py::print(iterNode, iterPredecessor);
                                 if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(iterNode, iterPredecessor).id);
 
                                 /*
@@ -948,12 +1057,16 @@ public:
                                     throw std::runtime_error("path is not a path");
                                 }*/
 
-                                nodeToPredecessor[iterNode][iterPredecessor] = 0.0;
-                                nodeToPredecessor[iterPredecessor][iterNode] = 0.0;
-                                if (nodeComponent != nodeToComponent[iterNode]) {
-                                    mergeComponents(nodeComponent, nodeToComponent[iterNode]);
+                                nodeToPredecessor[iterNode][iterPredecessor] = 0;
+                                nodeToPredecessor[iterPredecessor][iterNode] = 0;
+                                iterNodeComponent = nodeToComponent[iterNode];
+                                if (nodeComponent != iterNodeComponent) {
+                                    componentAge[iterNodeComponent]++;
+                                    mergeComponents(nodeComponent, iterNodeComponent);
                                 };
 
+                                node3 = iterPredecessor;
+                                node4 = iterNode;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
@@ -962,17 +1075,45 @@ public:
                             if (nodeToPredecessor[node].size() < 2 || nodeToPredecessor[newNode].size() < 2) {
                                 throw std::runtime_error("not correctly connected");
                             }*/
-
+                            
+                            componentAge[newNodeComponent]++;
+                            componentAge[nodeComponent]++;
                             mergeComponents(nodeComponent, newNodeComponent);
 
-                            updateComponentCost(nodeComponent);
+                            // eliminate self edges
+                            handleSelfEdges();
 
-                            // think about what happens after merge, how can be continued?
-                            return true;
+                            py::print("updating component cost");
+
+                            // updateComponentCost(nodeComponent);
+                            updateComponentCostInDirection(nodeComponent, node1, node2);
+                            updateComponentCostInDirection(nodeComponent, node3, node4);
+
 
                             // continue by reinitializing all nodes from the new component to the prority queue, existing values in the queue will be ignored when they are reached
+                            int age = componentAge[nodeComponent];
+                            for (const auto node : components[nodeComponent]) {
+                                double cost = std::get<1>(getLowestCostPredecessor(node));
+                                priorityQueue.push({ cost, node, node, nodeComponent, age});
+                                costVec[node] = cost;
+                                dist[node] = 0;
+                                pred[node] = node;
+                                start[node] = node;
+                                fromComponent[node] = nodeComponent;
+                                nodeAge[node] = age;
+                            };
+
+                            // continue with next node from priority queue
+                            fullContinue = true;
+                            break;
                         };
                     };
+
+                    // continue when merge happened
+                    if (fullContinue) {
+                        fullContinue = false;
+                        continue;
+                    }
 
                     // don't add if cost is not good enough
                     if (newCost >= 0) continue;
@@ -994,11 +1135,13 @@ public:
                         searchHistory.push_back(searchGraph.getEdges(node, newNode)[0].id);
                     };
 
-                    priorityQueue.push({ newCost, newNode, nodeStartNode });
+                    priorityQueue.push({ newCost, newNode, nodeStartNode, nodeComponent, nodeComponentAge });
                     costVec[newNode] = newCost;
                     dist[newNode] = newDist;
                     pred[newNode] = node;
                     start[newNode] = nodeStartNode;
+                    fromComponent[node] = nodeComponent;
+                    nodeAge[node] = nodeComponentAge;
                 };
             };
         };
@@ -1019,10 +1162,10 @@ public:
 
         if (debug) py::print("searching from", startNode, "of component", startComponentId);
 
-        std::map<int, std::tuple<int, float>> foundNodes;
-        float tmpCost = 0.0;
+        std::map<int, std::tuple<int, double>> foundNodes;
+        double tmpCost = 0;
         foundNodes[startNode] = { startNode, tmpCost };
-        std::set<std::tuple<int, int, float>, TupleComparator> nodeQueue;
+        std::set<std::tuple<int, int, double>, TupleComparator> nodeQueue;
         int iterNode;
         int iterPredecessor;
 
@@ -1032,7 +1175,7 @@ public:
             // check if neigbor is in node to predecessor
             auto it = nodeToPredecessor[startNode].find(neighbor);
             if (it == nodeToPredecessor[startNode].end()) {
-                float neighborCost = searchGraph.getMinCostEdge(startNode, neighbor).cost;
+                double neighborCost = searchGraph.getMinCostEdge(startNode, neighbor).cost;
                 nodeQueue.emplace(neighbor, startNode, neighborCost);
             };
         };
@@ -1083,8 +1226,8 @@ public:
 
                     if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(node, predecessor).id);
 
-                    nodeToPredecessor[iterNode][iterPredecessor] = 0.0;
-                    nodeToPredecessor[iterPredecessor][iterNode] = 0.0;
+                    nodeToPredecessor[iterNode][iterPredecessor] = 0;
+                    nodeToPredecessor[iterPredecessor][iterNode] = 0;
                     if (startComponentId != nodeToComponent[iterNode]) {
                         mergeComponents(startComponentId, nodeToComponent[iterNode]);
                     };
@@ -1101,7 +1244,7 @@ public:
             for (const auto& edge : searchGraph.getEdges(node)) {
                 int neighbor = edge.node2;
                 if (neighbor != predecessor && neighbor != node) {
-                    float neighborCost = cost + searchGraph.getMinCostEdge(neighbor, node).cost;
+                    double neighborCost = cost + searchGraph.getMinCostEdge(neighbor, node).cost;
                     if (foundNodes.contains(neighbor)) {
                         if (std::get<1>(foundNodes[neighbor]) > neighborCost) {
                             foundNodes[neighbor] = { node, neighborCost };
@@ -1117,7 +1260,7 @@ public:
         return false;
     };
 
-    std::tuple<std::vector<std::tuple<int, int, int>>, std::vector<std::tuple<int, int, int, float, int>>, std::map<int, std::set<int>>, std::map<int, std::map<int, float>>> getState() {
+    std::tuple<std::vector<std::tuple<int, int, int>>, std::vector<std::tuple<int, int, int, double, int>>, std::map<int, std::set<int>>, std::map<int, std::map<int, double>>> getState() {
         auto [nodes, edges] = searchGraph.export_();
 
         return { nodes, edges, components, nodeToPredecessor };
@@ -1165,12 +1308,12 @@ public:
         int i = 0;
         while (ignoreNodes.size() < searchGraph.getAllNodeIds().size() and i < maxIterations) {
             if (debug) py::print("iteration:", i++);
-            float minCost = 100;
+            double minCost = MAX_DOUBLE;
             int minNode;
             for (const auto& node : searchGraph.getAllNodeIds()) {
                 if (ignoreNodes.contains(node)) continue;
 
-                float cost = std::get<1>(getLowestCostPredecessor(node));
+                double cost = std::get<1>(getLowestCostPredecessor(node));
                 if (cost < minCost) {
                     minCost = cost;
                     minNode = node;
@@ -1204,11 +1347,14 @@ public:
         initialSetup();
         py::print("finished initial setup, starting search");
 
-        while (true) {
-            if (!searchParallel()) break;
-            handleSelfEdges();
-            if (trackHistory) setHistory();
-        }
+        searchParallel(false);
+        handleSelfEdges();
+        if (trackHistory) setHistory();
+        
+        py::print("making cuts");
+
+        searchParallel(true);
+
         py::print("finished search");
 
         file.close();
