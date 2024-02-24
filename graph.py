@@ -47,10 +47,21 @@ class GraphFactory:
             y = node // col_count
 
             if x != 0:
-                edges.append((node, node - 1, {"cost": (data[1][slice_num][x][y] * 2) - 1, "id": i}))
+                cost = data[1][slice_num][x][y] - 0.55
+                if cost > 0:
+                    cost *= (100 / 0.45)**3
+                else:
+                    cost *= (150 / 0.55)**3
+                edges.append((node, node - 1, {"cost": int(cost), "id": i}))
                 i += 1
             if y != 0:
-                edges.append((node, node - col_count, {"cost": (data[2][slice_num][x][y] * 2) - 1, "id": i}))
+                cost = data[2][slice_num][x][y] - 0.55
+                if cost > 0:
+                    cost *= (100 / 0.45)**3
+                else:
+                    cost *= (150 / 0.55)**3
+
+                edges.append((node, node - col_count, {"cost": int(cost), "id": i}))
                 i += 1
 
         graph.add_edges_from(edges)

@@ -12,8 +12,7 @@ sys.path.append("C:/Users/FreBe/projects/ShortestPathMulticut/build/Release")
 import spm_solver
 
 sys.path.append("C:/Users/FreBe/projects/EdgeContractionMulticut/build/Release")
-from edge_contraction_solver import LargestPositiveCost
-from edge_contraction_solver import greedyAdditiveEdgeContraction
+from edge_contraction_solver import EdgeContractionSolver
 
 # use a transaction lock to prevent drawing if the graph is changed
 drawing_lock = threading.Lock()
@@ -40,7 +39,7 @@ class Manager:
         graph = GraphFactory.construct_from_values(nodes, edges)
         self.visualizer.set_graph(graph)
 
-        self.visualizer.set_history_file("2024-01-24_16-29-39.txt")
+        self.visualizer.set_history_file("2024-01-31_10-39-43.txt")
 
     def multithreading_test(self):
         self.visualization_thread.start()
@@ -91,10 +90,11 @@ class Manager:
         print("result:")
         print([edge_id for edge_id in multicut])
 
-    def run_official_edge_contraction_solver(self):
+    def run_andres_edge_contraction_solver(self):
         self.visualization_thread.start()
 
-        graph = GraphFactory.generate_grid((50, 50))
+        # graph = GraphFactory.generate_grid((50, 50))
+        graph = GraphFactory.read_slice_from_snemi3d(3)
 
         while self.visualizer is None:
             time.sleep(1)
@@ -104,6 +104,130 @@ class Manager:
         input("Waiting for input")
 
         multicut, elapsed = greedyAdditiveEdgeContraction(*(graph.standard_export()))
+
+        print("execution Time: ", elapsed, "ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_andres_edge_contraction_solver_from_file(self):
+        solver = EdgeContractionSolver()
+        solver.load_from_file("graphs\\CP-Lib\\Random\\p2000-1.txt")
+        solver.largest_positive_cost_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+    def run_maximum_spanning_tree_solver(self):
+        solver = EdgeContractionSolver()
+
+        print("loading from file")
+        solver.load_from_file("graphs\\CP-Lib\\Random\\p2000-1.txt")
+
+        print("test maximum spanning tree")
+        solver.spanning_tree_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        self.visualization_thread.start()
+
+        print("loading from parameters")
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+        self.visualizer.set_graph(graph)
+
+        solver.load(*(graph.standard_export()))
+
+        print("test maximum spanning tree")
+        solver.spanning_tree_edge_contraction()
+        multicut = solver.get_multicut()
+        print(f"multicut length: {len(multicut)}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def full_edge_contraction_test(self):
+        solver = EdgeContractionSolver()
+
+        print("loading from file")
+        solver.load_from_file("graphs\\CP-Lib\\Random\\p2000-1.txt")
+
+        print("test largest positive cost")
+        solver.largest_positive_cost_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        print("test greedy matching")
+        solver.greedy_matchings_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        print("test maximum spanning tree")
+        solver.spanning_tree_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        print("loading from parameters")
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+        solver.load(*(graph.standard_export()))
+
+        print("test largest positive cost")
+        solver.largest_positive_cost_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        print("test greedy matching")
+        solver.greedy_matchings_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        print("test maximum spanning tree")
+        solver.spanning_tree_edge_contraction()
+        print(f"multicut length: {len(solver.get_multicut())}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+    def run_parallel_edge_contraction_solver(self):
+        self.visualization_thread.start()
+
+        # graph = GraphFactory.generate_grid((50, 50))
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        input("Waiting for input")
+
+        multicut, elapsed = greedyParallelAdditiveEdgeContraction(*(graph.standard_export()))
+
+        print("execution Time: ", elapsed, "ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_spanning_tree_edge_contraction_solver(self):
+        self.visualization_thread.start()
+
+        # graph = GraphFactory.generate_grid((50, 50))
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+
+        self.visualizer.set_graph(graph)
+
+        input("Waiting for input")
+
+        multicut, elapsed = spanningTreeEdgeContraction(*(graph.standard_export()))
 
         print("execution Time: ", elapsed, "ms")
 

@@ -9,10 +9,14 @@ manager = None
 def main():
     global manager
     manager = Manager()
-    manager.test_visualizer()
+    # manager.test_visualizer()
     # manager.run_parallel_spm_solver()
     # manager.run_external_spm_solver()
-    # manager.run_official_edge_contraction_solver()
+    # manager.run_parallel_edge_contraction_solver()
+    # manager.run_andres_edge_contraction_solver_from_file()
+    # manager.full_edge_contraction_test()
+    manager.run_maximum_spanning_tree_solver()
+    # manager.run_spanning_tree_edge_contraction_solver()
     # manager.run_edge_contraction_solver()
     # manager.multithreading_test()
 
