@@ -449,8 +449,29 @@ public:
         return { minCostPredecessor, minCost };
     };
 
+    void handleSelfEdgesOfNode(int node) {
+        py::print("handling self edges");
+
+        for (const Edge& edge : searchGraph.getEdges(node)) {
+            if (edge.node1 == edge.node2) {
+                if (edge.cost < 0) {
+                    multicut.insert(edge.id);
+                    score += edge.cost;
+                    py::print("score:", score);
+                };
+
+                auto it1 = nodeToPredecessor[edge.node1].find(edge.node2);
+                if (it1 != nodeToPredecessor[edge.node1].end()) {
+                    nodeToPredecessor[edge.node1].erase(edge.node2);
+                };
+
+                searchGraph.removeEdge(edge.node1, edge.node2, edge.key, edge.id);
+            };
+        };
+    };
+
     void handleSelfEdges() {
-        if (debug) py::print("handling self edges");
+        py::print("handling self edges");
 
         for (const Edge& edge : searchGraph.getAllEdges()) {
             if (edge.node1 == edge.node2) {
@@ -471,7 +492,7 @@ public:
     };
 
     void updateComponentCost(int componentId) {
-        if (debug) py::print("updating costs for component ", componentId);
+        py::print("updating costs for component ", componentId);
 
         std::set<int> nodes = components[componentId];
         std::vector<int> startNodes;
@@ -611,7 +632,7 @@ public:
     };
 
     int handleCycle(std::vector<std::tuple<int, Edge>> cycle, bool createComponent = true) {
-        if (debug) py::print("handling cycle:");
+        py::print("handling cycle:");
 
         double cutScore = 0;
 
@@ -629,7 +650,6 @@ public:
             py::print(cutScore);
             throw std::runtime_error("cutScore is greater than zero");
         };
-        py::print("score", score);
 
         // create necessary variables
         std::set<int> cycleNodesSet;
@@ -672,17 +692,13 @@ public:
                 nodeToPredecessor[neighbour].erase(cycleNode);
                 if (createComponent) {
                     nodeToPredecessor[neighbour][newNode] = 0;
-                    nodeToPredecessor[newNode][neighbour] = 0;
+                    nodeToPredecessor[newNode][neighbour] = std::get<1>(getLowestCostPredecessor(neighbour));
                 };
             };
             nodeToPredecessor.erase(cycleNode);
         };
-        // check for a second cycle?
 
-        // insert node remap here if required
-
-        py::print("handling self edges");
-        handleSelfEdges();
+        handleSelfEdgesOfNode(newNode);
 
         py::print("finished handling cycle");
 
@@ -694,8 +710,11 @@ public:
                 nodeToComponent[node] = newComponentId;
                 // py::print("update node", node, "to component", newComponentId);
             };
+
             // validateState();
-            updateComponentCost(newComponentId);
+            for (const auto& pair : nodeToPredecessor[newNode]) {
+                updateComponentCostInDirection(newComponentId, newNode, pair.first);
+            }
             return newComponentId;
         } else {
             // reset all variables
@@ -905,6 +924,7 @@ public:
                             // found cycle
                             auto [path, cost] = findPath(nodeStartNode, newNodeStartNode);
 
+                            // TODO: make dictionary of known nodes with path and cost to not reiterate
                             // ignore cycle if cost is greater or equal to zero
                             if (cost + newDist + dist[newNode] >= 0) continue;
 
@@ -1081,6 +1101,7 @@ public:
                             mergeComponents(nodeComponent, newNodeComponent);
 
                             // eliminate self edges
+                            // TODO: only check necessary nodes for self edges
                             handleSelfEdges();
 
                             py::print("updating component cost");
