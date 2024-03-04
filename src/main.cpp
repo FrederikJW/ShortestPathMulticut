@@ -177,6 +177,10 @@ public:
         return *edge;
     };
 
+    Edge getEdgeById(int edgeId) {
+        return allEdges[edgeId];
+    }
+
     std::vector<int> getAllEdgeIds() {
         std::vector<int> edges;
         for (const auto& pair : allEdges) {
@@ -266,6 +270,7 @@ private:
     std::map<int, int> nodeToComponent;
     std::map<int, std::set<int>> components;
     std::map<int, std::map<int, double>> nodeToPredecessor;
+    std::map<int, std::map<int, double>> foundPaths;
     std::set<int> multicut;
     std::vector<int> searchHistory;
     std::vector<int> madeCut;
@@ -273,12 +278,11 @@ private:
     std::vector<std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>> fullHistory;
     mutable std::mutex mtx;
     bool trackHistory;
-    double score;
     std::ofstream file;
     std::string filename;
     std::map<int, int> componentAge;
     int nextComponentId;
-
+    std::chrono::milliseconds elapsed;
 
 public:
     Solver() {
@@ -332,6 +336,19 @@ public:
             };
         };
     };
+
+    float getElapsedTime() {
+        return static_cast<float>(elapsed.count());
+    }
+
+    double getScore() {
+        double score = 0;
+        for (const int edgeId : multicut) {
+            auto edge = graph.getEdgeById(edgeId);
+            score += edge.cost;
+        }
+        return score;
+    }
 
     void loadGraph(const std::vector<std::tuple<int, int, int>>& nodes, const std::vector<std::tuple<int, int, int, double, int>>& edges) {
         py::print("loading graph");
@@ -450,14 +467,10 @@ public:
     };
 
     void handleSelfEdgesOfNode(int node) {
-        py::print("handling self edges");
-
         for (const Edge& edge : searchGraph.getEdges(node)) {
             if (edge.node1 == edge.node2) {
                 if (edge.cost < 0) {
                     multicut.insert(edge.id);
-                    score += edge.cost;
-                    py::print("score:", score);
                 };
 
                 auto it1 = nodeToPredecessor[edge.node1].find(edge.node2);
@@ -471,14 +484,10 @@ public:
     };
 
     void handleSelfEdges() {
-        py::print("handling self edges");
-
         for (const Edge& edge : searchGraph.getAllEdges()) {
             if (edge.node1 == edge.node2) {
                 if (edge.cost < 0) {
                     multicut.insert(edge.id);
-                    score += edge.cost;
-                    py::print("score:", score);
                 };
 
                 auto it1 = nodeToPredecessor[edge.node1].find(edge.node2);
@@ -492,8 +501,6 @@ public:
     };
 
     void updateComponentCost(int componentId) {
-        py::print("updating costs for component ", componentId);
-
         std::set<int> nodes = components[componentId];
         std::vector<int> startNodes;
         for (const auto& node : nodes) {
@@ -634,7 +641,7 @@ public:
     int handleCycle(std::vector<std::tuple<int, Edge>> cycle, bool createComponent = true) {
         py::print("handling cycle:");
 
-        double cutScore = 0;
+        // double cutScore = 0;
 
         // remove cut edges from graph and add them to the multicut
         for (const auto& [node, edge] : cycle) {
@@ -642,14 +649,15 @@ public:
             searchGraph.removeEdge(edge.node1, edge.node2, edge.key, edge.id);
             multicut.insert(edge.id);
             if (trackHistory) madeCut.push_back(edge.id);
-            score += edge.cost;
-            cutScore += edge.cost;
+            // score += edge.cost;
+            // cutScore += edge.cost;
         };
 
+        /*
         if (cutScore > 0) {
             py::print(cutScore);
             throw std::runtime_error("cutScore is greater than zero");
-        };
+        };*/
 
         // create necessary variables
         std::set<int> cycleNodesSet;
@@ -732,7 +740,7 @@ public:
         while (reset) {
             reset = false;
 
-            handleSelfEdges();
+            // handleSelfEdges();
 
             // iterate over all nodes initially
             for (int nodeId : searchGraph.getAllNodeIds()) {
@@ -848,6 +856,8 @@ public:
             madeMerge.clear();
         };
 
+        foundPaths.clear();
+
         std::priority_queue<node_tuple, std::vector<node_tuple>, std::greater<node_tuple>> priorityQueue;
         int maxNodes = (searchGraph.getMaxNodeId() + 1) * 2;
 
@@ -922,7 +932,18 @@ public:
                         if (nodeComponent == newNodeComponent) {
                             if (!allowCuts) continue;
                             // found cycle
+                            auto it = foundPaths.find(nodeStartNode);
+                            if (it != foundPaths.end()) {
+                                auto it2 = (it->second).find(newNodeStartNode);
+                                if (it2 != (it->second).end()) {
+                                    if (it2->second + newDist + dist[newNode] >= 0) continue;
+                                }
+                            }
+
                             auto [path, cost] = findPath(nodeStartNode, newNodeStartNode);
+
+                            foundPaths[nodeStartNode][newNodeStartNode] = cost;
+                            foundPaths[newNodeStartNode][nodeStartNode] = cost;
 
                             // TODO: make dictionary of known nodes with path and cost to not reiterate
                             // ignore cycle if cost is greater or equal to zero
@@ -1102,9 +1123,7 @@ public:
 
                             // eliminate self edges
                             // TODO: only check necessary nodes for self edges
-                            handleSelfEdges();
-
-                            py::print("updating component cost");
+                            // handleSelfEdges();
 
                             // updateComponentCost(nodeComponent);
                             updateComponentCostInDirection(nodeComponent, node1, node2);
@@ -1132,6 +1151,13 @@ public:
 
                     // continue when merge happened
                     if (fullContinue) {
+                        if (trackHistory) {
+                            setHistory();
+                            searchHistory.clear();
+                            madeCut.clear();
+                            madeMerge.clear();
+                        }
+
                         fullContinue = false;
                         continue;
                     }
@@ -1363,22 +1389,28 @@ public:
         file.open(filename);
         py::print("created file", filename);
 
-        score = 0;
+        auto start = std::chrono::high_resolution_clock::now();
+
+        // score = 0;
         py::print("starting initial setup");
         initialSetup();
         py::print("finished initial setup, starting search");
 
         searchParallel(false);
-        handleSelfEdges();
+        // handleSelfEdges();
         if (trackHistory) setHistory();
         
         py::print("making cuts");
 
         searchParallel(true);
+        
+        auto end = std::chrono::high_resolution_clock::now();
 
         py::print("finished search");
 
         file.close();
+
+        elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
         return multicut;
     };
@@ -1393,7 +1425,7 @@ public:
         file.open(filename);
         py::print("created file", filename);
 
-        score = 0;
+        // score = 0;
         py::print("starting initial setup");
         initialSetup();
         // validateState();
@@ -1453,6 +1485,8 @@ PYBIND11_MODULE(spm_solver, m) {
         .def("solve", &Solver::solve)
         .def("get_state", &Solver::getState)
         .def("get_history", &Solver::getHistory)
+        .def("get_score", &Solver::getScore)
+        .def("get_elapsed_time", &Solver::getElapsedTime)
         .def("activate_track_history", &Solver::activateTrackHistory)
         .def("parallel_search_solve", &Solver::parallelSearchSolve);
 
