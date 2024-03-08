@@ -1,6 +1,9 @@
 import sys
 import threading
 import time
+import csv
+import matplotlib.pyplot as plt
+import pandas as pd
 
 import networkx as nx
 
@@ -39,7 +42,7 @@ class Manager:
         graph = GraphFactory.construct_from_values(nodes, edges)
         self.visualizer.set_graph(graph)
 
-        self.visualizer.set_history_file("2024-01-31_10-39-43.txt")
+        self.visualizer.set_history_file("2024-03-06_10-26-58.txt", 1)
 
     def multithreading_test(self):
         self.visualization_thread.start()
@@ -112,6 +115,100 @@ class Manager:
         while self.visualization_thread.is_alive():
             time.sleep(1)
 
+    def make_box_plot(self):
+        solving_method_names = [
+            "largest_positive_cost_edge_contraction",
+            "maximum_matching",
+            "maximum_matching_with_cutoff",
+            "spanning_tree_edge_contraction",
+            "spanning_tree_edge_contraction_continued",
+            "greedy_matchings_edge_contraction"
+        ]
+
+        time_data_dict = {}
+        score_data_dict = {}
+
+        for solving_method_name in solving_method_names:
+
+            # Load the CSV file
+            file_path = f'benchmark/snemi/{solving_method_name}.csv'
+            data = pd.read_csv(file_path)
+
+            time_data_dict[solving_method_name] = data['time']
+            score_data_dict[solving_method_name] = data['score']
+
+        time_data = pd.DataFrame(time_data_dict)
+        score_data = pd.DataFrame(score_data_dict)
+        positions = list(range(1, len(solving_method_names) + 1))
+
+        fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+
+        # Box Plot 1: Time
+        ax[0].boxplot(time_data, positions=positions, widths=0.6, patch_artist=True, vert=True)
+        ax[0].set_xticks(positions)
+        ax[0].set_xticklabels(time_data_dict.keys())
+        ax[0].set_title('Comparison of Time Distributions')
+        ax[0].set_xlabel('Algorithm')
+        ax[0].set_ylabel('Milliseconds')
+        ax[0].grid(True)
+
+        # Box Plot 2: Score
+        ax[1].boxplot(score_data, positions=positions, widths=0.6, patch_artist=True, vert=True)
+        ax[1].set_xticks(positions)
+        ax[1].set_xticklabels(time_data_dict.keys())
+        ax[1].set_title('Comparison of Score Distributions')
+        ax[1].set_xlabel('Algorithm')
+        ax[1].set_ylabel('Value')
+        ax[1].grid(True)
+
+        plt.setp(ax[0].get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+        plt.setp(ax[1].get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+        # Adjust layout to not overlap
+        plt.tight_layout()
+
+        # Show the plots
+        plt.show()
+
+    def run_full_edge_contraction_benchmark_on_snemi(self):
+        solving_method_names = [
+            "largest_positive_cost_edge_contraction",
+            "maximum_matching",
+            "maximum_matching_with_cutoff",
+            "spanning_tree_edge_contraction",
+            "spanning_tree_edge_contraction_continued",
+            "greedy_matchings_edge_contraction"
+        ]
+
+        header = ["slice", "score", "time"]
+        data = {name: [] for name in solving_method_names}
+        number_of_slices = 100
+
+        for i in range(number_of_slices):
+            graph = GraphFactory.read_slice_from_snemi3d(i)
+            solver = EdgeContractionSolver()
+            solver.load(*(graph.standard_export()))
+
+            for solving_method_name in solving_method_names:
+                solving_method = getattr(solver, solving_method_name)
+
+                solving_method()
+
+                data[solving_method_name].append([i, solver.get_score(), solver.get_elapsed_time()])
+
+        for solving_method_name in solving_method_names:
+            with open(f"benchmark\\snemi\\{solving_method_name}.csv", "w", newline="") as file:
+                writer = csv.writer(file)
+
+                writer.writerow(header)
+
+                writer.writerows(data[solving_method_name])
+
+                average_score = sum([line[1] for line in data[solving_method_name]]) / number_of_slices
+                average_time = sum([line[2] for line in data[solving_method_name]]) / number_of_slices
+                writer.writerow(["average", average_score, average_time])
+
+
     def run_andres_edge_contraction_solver_from_file(self):
         solver = EdgeContractionSolver()
         solver.load_from_file("graphs\\CP-Lib\\Random\\p2000-1.txt")
@@ -121,14 +218,6 @@ class Manager:
 
     def run_maximum_spanning_tree_solver(self):
         solver = EdgeContractionSolver()
-
-        print("loading from file")
-        solver.load_from_file("graphs\\CP-Lib\\Random\\p2000-1.txt")
-
-        print("test maximum spanning tree")
-        solver.spanning_tree_edge_contraction()
-        print(f"multicut length: {len(solver.get_multicut())}")
-        print(f"execution Time: {solver.get_elapsed_time()}ms")
 
         self.visualization_thread.start()
 
@@ -145,7 +234,86 @@ class Manager:
         solver.spanning_tree_edge_contraction()
         multicut = solver.get_multicut()
         print(f"multicut length: {len(multicut)}")
+        print(f"Score: {solver.get_score()}")
         print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_maximum_spanning_tree_continued_solver(self):
+        solver = EdgeContractionSolver()
+
+        self.visualization_thread.start()
+
+        print("loading from parameters")
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+        self.visualizer.set_graph(graph)
+
+        solver.load(*(graph.standard_export()))
+
+        print("test maximum spanning tree")
+        solver.spanning_tree_edge_contraction_continued()
+        multicut = solver.get_multicut()
+        print(f"multicut length: {len(multicut)}")
+        print(f"Score: {solver.get_score()}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_maximum_matching_solver(self):
+        solver = EdgeContractionSolver()
+
+        self.visualization_thread.start()
+
+        print("loading from parameters")
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+        self.visualizer.set_graph(graph)
+
+        solver.load(*(graph.standard_export()))
+
+        print("test maximum matching")
+        solver.maximum_matching()
+        multicut = solver.get_multicut()
+        print(f"multicut length: {len(multicut)}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+        print(f"Score: {solver.get_score()}")
+
+        self.visualizer.set_multicut(multicut)
+
+        while self.visualization_thread.is_alive():
+            time.sleep(1)
+
+    def run_maximum_matching_with_cutoff_solver(self):
+        solver = EdgeContractionSolver()
+
+        self.visualization_thread.start()
+
+        print("loading from parameters")
+        graph = GraphFactory.read_slice_from_snemi3d(3)
+
+        while self.visualizer is None:
+            time.sleep(1)
+        self.visualizer.set_graph(graph)
+
+        solver.load(*(graph.standard_export()))
+
+        print("test maximum matching")
+        solver.maximum_matching_with_cutoff()
+        multicut = solver.get_multicut()
+        print(f"multicut length: {len(multicut)}")
+        print(f"execution Time: {solver.get_elapsed_time()}ms")
+        print(f"Score: {solver.get_score()}")
 
         self.visualizer.set_multicut(multicut)
 
@@ -281,6 +449,9 @@ class Manager:
         self.visualizer.set_graph(graph)
 
         multicut = solver.parallel_search_solve()
+
+        print(f"Score: {solver.get_score()}")
+        print(f"Time: {solver.get_elapsed_time()}")
 
         input("Waiting for input")
 

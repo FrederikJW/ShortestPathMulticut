@@ -28,6 +28,7 @@ class Visualizer:
         self.current_history = (0, 0)
         self.history = []
         self.history_mode = False
+        self.history_mode_type = 0
         self.animation_time_progress = None
         self.redraw_edges = set()
 
@@ -146,7 +147,8 @@ class Visualizer:
             self.edge_colors[edge_id] = RED
         self.draw_necessary = True
 
-    def set_history_file(self, filename):
+    def set_history_file(self, filename, mode=0):
+        self.history_mode_type = mode
         print("read history file")
         self.history = []
         with open(filename, "r") as file:
@@ -184,17 +186,21 @@ class Visualizer:
         return self.history
 
     def set_edge_color_for_history(self):
-        self.animation_time_progress += 0.0001
+        self.animation_time_progress += 0.01
         history = self.get_history()
         if len(history) == 0:
             return
         major_history = self.current_history[0]
         minor_history = self.current_history[1]
         current_history_state = history[major_history]
+        if self.history_mode_type != 0 and len(current_history_state[0]) == 0 and len(current_history_state[1]) == 0 and len(current_history_state[2]) == 0:
+            self.search_edge_colors = {}
+            self.draw_necessary = True
 
         minor_history += 1
         if minor_history > len(current_history_state[0]):
-            self.search_edge_colors = {}
+            if self.history_mode_type == 0:
+                self.search_edge_colors = {}
             self.draw_necessary = True
             if major_history == len(history) - 1:
                 return
