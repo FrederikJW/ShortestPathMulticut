@@ -208,6 +208,39 @@ class Manager:
                 average_time = sum([line[2] for line in data[solving_method_name]]) / number_of_slices
                 writer.writerow(["average", average_score, average_time])
 
+    def run_shortest_path_benchmark_on_snemi(self):
+        header = ["slice", "score", "time"]
+        data = []
+        number_of_slices = 100
+
+        with open(f"benchmark\\snemi\\shortest_path.csv", "w", newline="") as file:
+            writer = csv.writer(file)
+
+            writer.writerow(header)
+
+        for i in range(number_of_slices):
+            graph = GraphFactory.read_slice_from_snemi3d(i)
+            solver = spm_solver.Solver()
+            solver.load_graph(*(graph.export()))
+
+            try:
+                solver.parallel_search_solve()
+            except Exception as e:
+                print(e)
+            else:
+                line = [i, solver.get_score(), solver.get_elapsed_time()]
+                with open(f"benchmark\\snemi\\shortest_path.csv", "a", newline="") as file:
+                    writer = csv.writer(file)
+                    writer.writerow(line)
+                data.append(line)
+
+        # with open(f"benchmark\\snemi\\shortest_path.csv", "a", newline="") as file:
+        #     writer = csv.writer(file)
+        #
+        #     average_score = sum([line[1] for line in data]) / number_of_slices
+        #     average_time = sum([line[2] for line in data]) / number_of_slices
+        #     writer.writerow(["average", average_score, average_time])
+
 
     def run_andres_edge_contraction_solver_from_file(self):
         solver = EdgeContractionSolver()
