@@ -115,14 +115,72 @@ class Manager:
         while self.visualization_thread.is_alive():
             time.sleep(1)
 
+    def make_iterations_plot(self):
+        files = [
+            "spanning_tree_edge_contraction",
+            "maximum_matching"
+        ]
+
+        fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+
+        for i in range(len(files)):
+            solving_method_name = files[i]
+            file_path = f'benchmark/snemi/{solving_method_name}_contractions.csv'
+
+            # Reload the CSV, assuming no header and filling missing values directly
+            data = pd.read_csv(file_path, header=None, na_filter=False, on_bad_lines='skip')
+
+            # Replace non-numeric values (including empty strings) with zero
+            data = data.apply(pd.to_numeric, errors='coerce').fillna(0)
+
+            # Calculate the number of non-zero values per row
+            num_values_per_row = data.apply(lambda row: (row != 0).sum(), axis=1)[1:]
+
+            # Generate the boxplot for the number of non-zero values per row
+            ax[i].boxplot(num_values_per_row, vert=True, patch_artist=True)
+            ax[i].set_title(solving_method_name)
+            ax[i].set_ylabel('Number of Iterations')
+
+        # Display the boxplot
+        plt.show()
+
+
+    def make_contractions_plot(self):
+        files = [
+            "spanning_tree_edge_contraction",
+            "maximum_matching"
+        ]
+
+        fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+
+        for i in range(len(files)):
+            solving_method_name = files[i]
+            file_path = f'benchmark/snemi/{solving_method_name}_contractions.csv'
+
+            # Reload the CSV, assuming no header and filling missing values directly
+            data = pd.read_csv(file_path, header=None, na_filter=False, on_bad_lines='skip')
+
+            # Replace non-numeric values (including empty strings) with zero
+            data = data.apply(pd.to_numeric, errors='coerce').fillna(0)
+
+            # Each row will be plotted as a separate series
+            for index, row in data.iterrows():
+                ax[i].plot(row.index + 1, row, marker='o', linestyle='-')
+
+            ax[i].set_title(solving_method_name)
+            ax[i].set_xlabel('Iteration')
+            ax[i].set_ylabel('Number of Contractions')
+            ax[i].set_yscale('log')
+            if solving_method_name == "maximum_matching":
+                ax[i].set_xscale('log')
+
+        # Show the plot
+        plt.show()
+
     def make_box_plot(self):
         solving_method_names = [
             "largest_positive_cost_edge_contraction",
-            "maximum_matching",
-            "maximum_matching_with_cutoff",
-            "spanning_tree_edge_contraction",
-            "spanning_tree_edge_contraction_continued",
-            "greedy_matchings_edge_contraction"
+            "shortest_path"
         ]
 
         time_data_dict = {}
@@ -207,6 +265,33 @@ class Manager:
                 average_score = sum([line[1] for line in data[solving_method_name]]) / number_of_slices
                 average_time = sum([line[2] for line in data[solving_method_name]]) / number_of_slices
                 writer.writerow(["average", average_score, average_time])
+
+    def count_contractions_on_snemi(self):
+        solving_method_names = [
+            "maximum_matching",
+            "spanning_tree_edge_contraction"
+        ]
+
+        data = {name: [] for name in solving_method_names}
+        number_of_slices = 100
+
+        for i in range(number_of_slices):
+            graph = GraphFactory.read_slice_from_snemi3d(i)
+            solver = EdgeContractionSolver()
+            solver.load(*(graph.standard_export()))
+
+            for solving_method_name in solving_method_names:
+                solving_method = getattr(solver, solving_method_name)
+
+                solving_method()
+
+                data[solving_method_name].append(solver.get_contraction_history())
+
+        for solving_method_name in solving_method_names:
+            with open(f"benchmark\\snemi\\{solving_method_name}_contractions.csv", "w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerows(data[solving_method_name])
+
 
     def run_shortest_path_benchmark_on_snemi(self):
         header = ["slice", "score", "time"]

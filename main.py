@@ -19,11 +19,14 @@ def main():
     # manager.run_maximum_spanning_tree_solver()
     # manager.run_maximum_matching_solver()
     # manager.run_full_edge_contraction_benchmark_on_snemi()
+    # manager.count_contractions_on_snemi()
     # manager.run_shortest_path_benchmark_on_snemi()
     # manager.run_spanning_tree_edge_contraction_solver()
     # manager.run_edge_contraction_solver()
     # manager.multithreading_test()
-    manager.make_box_plot()
+    # manager.make_box_plot()
+    # manager.make_contractions_plot()
+    manager.make_iterations_plot()
 
 
 def on_terminate(signum, frame):
