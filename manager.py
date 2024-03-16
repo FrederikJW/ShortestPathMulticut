@@ -118,10 +118,11 @@ class Manager:
     def make_iterations_plot(self):
         files = [
             "spanning_tree_edge_contraction",
-            "maximum_matching"
+            "maximum_matching",
+            "greedy_matchings_edge_contraction"
         ]
 
-        fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+        fig, ax = plt.subplots(1, len(files), figsize=(10, 6))
 
         for i in range(len(files)):
             solving_method_name = files[i]
@@ -148,10 +149,11 @@ class Manager:
     def make_contractions_plot(self):
         files = [
             "spanning_tree_edge_contraction",
-            "maximum_matching"
+            "maximum_matching",
+            "greedy_matchings_edge_contraction"
         ]
 
-        fig, ax = plt.subplots(1, 2, figsize=(10, 6))
+        fig, ax = plt.subplots(1, len(files), figsize=(10, 6))
 
         for i in range(len(files)):
             solving_method_name = files[i]
@@ -171,7 +173,7 @@ class Manager:
             ax[i].set_xlabel('Iteration')
             ax[i].set_ylabel('Number of Contractions')
             ax[i].set_yscale('log')
-            if solving_method_name == "maximum_matching":
+            if i > 0:
                 ax[i].set_xscale('log')
 
         # Show the plot
@@ -230,11 +232,6 @@ class Manager:
 
     def run_full_edge_contraction_benchmark_on_snemi(self):
         solving_method_names = [
-            "largest_positive_cost_edge_contraction",
-            "maximum_matching",
-            "maximum_matching_with_cutoff",
-            "spanning_tree_edge_contraction",
-            "spanning_tree_edge_contraction_continued",
             "greedy_matchings_edge_contraction"
         ]
 
@@ -268,8 +265,7 @@ class Manager:
 
     def count_contractions_on_snemi(self):
         solving_method_names = [
-            "maximum_matching",
-            "spanning_tree_edge_contraction"
+            "greedy_matchings_edge_contraction"
         ]
 
         data = {name: [] for name in solving_method_names}
