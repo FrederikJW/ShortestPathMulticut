@@ -294,53 +294,10 @@ public:
         trackHistory = true;
     };
 
-    void validateState() {
-        // component validation
-        /*
-        for (const auto& node : searchGraph.getAllNodeIds()) {
-            if (!components[nodeToComponent[node]].contains(node)) {
-                throw std::runtime_error(std::to_string(node) + " has component id " + std::to_string(nodeToComponent[node]) + " but is not contained in components.");
-            };
-        };
-
-        for (const auto& [componentId, component] : components) {
-            for (const auto& node : component) {
-                if (nodeToComponent[node] != componentId) {
-                    throw std::runtime_error(std::to_string(node) + " is in component " + std::to_string(componentId) + " but has component id " + std::to_string(nodeToComponent[node]));
-                };
-            };
-        };*/
-
-        // node to predecessor validation
-        /*
-        for (const auto& node : searchGraph.getAllNodeIds()) {
-            for (const auto& [neighbor, cost] : nodeToPredecessor[node]) {
-                auto it = nodeToPredecessor[neighbor].find(node);
-                if (it == nodeToPredecessor[neighbor].end()) {
-                    throw std::runtime_error(std::to_string(neighbor) + " is predecessor of " + std::to_string(node) + " but not vice versa.");
-                };
-
-                if (nodeToComponent[node] != nodeToComponent[neighbor]) {
-                    throw std::runtime_error("connected nodes " + std::to_string(node) + " and " + std::to_string(neighbor) + " are in different components");
-                };
-
-                if (searchGraph.getEdges(node, neighbor).size() == 0) {
-                    throw std::runtime_error("connected nodes " + std::to_string(node) + " and " + std::to_string(neighbor) + " have no edge");
-                };
-            };
-        };*/
-
-        for (const auto& node : searchGraph.getAllNodeIds()) {
-            if (nodeToPredecessor[node].size() > 0 && std::get<1>(getLowestCostPredecessor(node)) >= 0) {
-                throw std::runtime_error("node " + std::to_string(node) + " is connected but has lowest cost predecessor 0");
-            };
-        };
-    };
-
     float getElapsedTime() {
         return static_cast<float>(elapsed.count());
     }
-
+    
     double getScore() {
         double score = 0;
         for (const int edgeId : multicut) {
@@ -511,8 +468,6 @@ public:
 
         std::queue<std::tuple<int, int>> nodeQueue;
         for (const auto& startNode : startNodes) {
-            // py::print("start from node:", startNode);
-            // std::set<int> visitedNodes;
 
             nodeQueue = std::queue<std::tuple<int, int>>();
             int predecessor = startNode;
@@ -523,20 +478,7 @@ public:
                 auto [currentNode, predecessor] = nodeQueue.front();
                 nodeQueue.pop();
 
-                // py::print("update:", currentNode, predecessor, nodeToComponent[currentNode]);
-                
-                /*
-                if (nodeToComponent[currentNode] != componentId) {
-                    throw std::runtime_error(std::to_string(currentNode) + " is in component " + std::to_string(nodeToComponent[currentNode]) + " but is connected to component " + std::to_string(componentId));
-                };
-                */
-
                 if (currentNode == predecessor) continue;
-
-                
-                // if (visitedNodes.contains(currentNode)) throw std::runtime_error("Found cycle. Node " + std::to_string(currentNode) + " has been visited before.");
-                // visitedNodes.insert(currentNode);
-                
 
                 double predecessorCost = std::get<1>(getLowestCostPredecessor(predecessor, currentNode));
                 double edgeCost = searchGraph.getMinCostEdge(currentNode, predecessor).cost;
@@ -578,7 +520,6 @@ public:
     };
 
     std::tuple<std::vector<std::tuple<int, Edge>>, double> findPath(int startNode, int endNode) {
-        if (debug) py::print("finding path from ", startNode, " to ", endNode);
 
         if (startNode == endNode) {
             std::vector<std::tuple<int, Edge>> emptyPath;
@@ -604,9 +545,8 @@ public:
                 double totalNeighborCost = cost + minEdge.cost;
                 predecessors[neighbor] = minEdge;
 
-                // mark edge as 
+                // mark edge as found
                 foundEdges.insert(minEdge.id);
-                
 
                 // mark node as found
                 foundNodes.insert(neighbor);
@@ -639,25 +579,14 @@ public:
     };
 
     int handleCycle(std::vector<std::tuple<int, Edge>> cycle, bool createComponent = true) {
-        py::print("handling cycle:");
-
-        // double cutScore = 0;
-
         // remove cut edges from graph and add them to the multicut
         for (const auto& [node, edge] : cycle) {
             if (debug) py::print(node, edge.cost);
             searchGraph.removeEdge(edge.node1, edge.node2, edge.key, edge.id);
             multicut.insert(edge.id);
             if (trackHistory) madeCut.push_back(edge.id);
-            // score += edge.cost;
-            // cutScore += edge.cost;
-        };
 
-        /*
-        if (cutScore > 0) {
-            py::print(cutScore);
-            throw std::runtime_error("cutScore is greater than zero");
-        };*/
+        };
 
         // create necessary variables
         std::set<int> cycleNodesSet;
@@ -675,7 +604,6 @@ public:
             components.erase(componentId);
         };
 
-        // nonCycleNodesSet = allNodesSet - cycleNodesSet
         std::set<int> nonCycleNodesSet;
         std::set_difference(allNodesSet.begin(), allNodesSet.end(),
             cycleNodesSet.begin(), cycleNodesSet.end(), std::inserter(nonCycleNodesSet, nonCycleNodesSet.begin()));
@@ -683,15 +611,10 @@ public:
         // remove component
         for (const auto& node : allNodesSet) {
             nodeToComponent.erase(node);
-            // py::print("erase node", node);
         };
-
-        py::print("merging Nodes");
 
         // merge nodes
         int newNode = searchGraph.mergeNodes(cycleNodesSet);
-        
-        if (debug) py::print("new node:", newNode);
 
         for (const auto& cycleNode : cycleNodesSet) {
             for (const auto& pair : nodeToPredecessor[cycleNode]) {
@@ -708,18 +631,14 @@ public:
 
         handleSelfEdgesOfNode(newNode);
 
-        py::print("finished handling cycle");
-
         if (createComponent) {
             nonCycleNodesSet.insert(newNode);
             int newComponentId = getNewComponentId();
             components[newComponentId] = nonCycleNodesSet;
             for (const auto& node : nonCycleNodesSet) {
                 nodeToComponent[node] = newComponentId;
-                // py::print("update node", node, "to component", newComponentId);
             };
 
-            // validateState();
             for (const auto& pair : nodeToPredecessor[newNode]) {
                 updateComponentCostInDirection(newComponentId, newNode, pair.first);
             }
@@ -740,8 +659,6 @@ public:
         while (reset) {
             reset = false;
 
-            // handleSelfEdges();
-
             // iterate over all nodes initially
             for (int nodeId : searchGraph.getAllNodeIds()) {
                 if (reset) break;
@@ -751,8 +668,6 @@ public:
                 if (component != nodeToComponent.end()) {
                     continue;
                 };
-
-                if (debug) py::print("creating new component for node ", nodeId);
 
                 // create new component
                 std::set<int> newComponent;
@@ -770,7 +685,7 @@ public:
                 while (!unsearchedNodes.empty()) {
                     if (reset) break;
                     int unsearchedNode = unsearchedNodes.back();
-                    if (debug) py::print("searching node ", unsearchedNode);
+
                     unsearchedNodes.pop_back();
 
                     auto it = previousSearchedNodes.find(unsearchedNode);
@@ -780,15 +695,12 @@ public:
 
                     for (const Edge& edge : searchGraph.getEdges(unsearchedNode)) {
                         int newNode = edge.node2;
-                        // somethings fishy here: continue if the newNode is already in the component
+
                         if (it != previousSearchedNodes.end() && previousSearchedNode == newNode) continue;
 
                         if (edge.cost < 0) {
                             // check for cycle
-                            // --------------------------------------------------------------------
                             if (newComponent.contains(newNode)) {
-                                if (debug) py::print("found cycle for nodes", newNode, "and", unsearchedNode, "in component", newComponentId);
-
                                 // cycle found
                                 auto [path, cost] = findPath(newNode, unsearchedNode);
 
@@ -801,8 +713,6 @@ public:
                                 reset = true;
                                 break;
                             }
-
-                            if (debug) py::print("adding node ", newNode, " to component ", newComponentId);
 
                             previousSearchedNodes[newNode] = unsearchedNode;
 
@@ -825,7 +735,6 @@ public:
     };
 
     void mergeComponents(int swallower, int swallowee) {
-        if (debug) py::print("merging component ", swallowee, " into component ", swallower);
         if (swallower == swallowee) {
             throw std::runtime_error("Merging a component into itself is not possible.");
         };
@@ -871,8 +780,6 @@ public:
         // start node from where the node is reached
         std::vector<int> start(maxNodes, -1);
 
-        // std::vector<bool> visited(maxNodes, false);
-
         std::vector<int> fromComponent(maxNodes, -1);
 
         std::vector<int> nodeAge(maxNodes, -1);
@@ -883,7 +790,6 @@ public:
             double cost = std::get<1>(getLowestCostPredecessor(node));
             // initialize all nodes part from a bigger component
             if (nodeToPredecessor[node].size() > 0) {
-                // py::print("initial priority queue push: ", cost, node, node);
                 int component = nodeToComponent[node];
                 priorityQueue.push({ cost, node, node, component, componentAge[component]});
                 costVec[node] = cost;
@@ -897,25 +803,19 @@ public:
 
         bool fullContinue = false;
 
-        // think of end statement, maybe end when cost reached 0 or never add cost with 0 and end when priotityqueue is empty e.g. !priority_queue.empty()
         while (!priorityQueue.empty()) {
             auto [cost, node, nodeStartNode, nodeComponent, nodeComponentAge] = priorityQueue.top();
             priorityQueue.pop();
 
             if (nodeComponentAge < componentAge[nodeComponent]) continue;
+
             double nodeDist = dist[node];
-
-            // if (cost > costVec[node] || cost > dist[node] + costVec[nodeStartNode] || nodeStartNode != start[node]) continue;
-            // visited[node] = true;
-
-            // py::print("searching from", node, nodeStartNode, nodeComponent, nodeComponentAge, componentAge[nodeComponent]);
 
             // check all connected nodes via positive edges
             for (const auto& edge : searchGraph.getEdges(node)) {
                 if (edge.cost > 0) {
                     int newNode = edge.node2;
                     int newNodeAge = nodeAge[newNode];
-                    //py::print("check node", newNode);
                     double newCost = edge.cost + cost;
                     double newDist = edge.cost + nodeDist;
 
@@ -945,11 +845,9 @@ public:
                             foundPaths[nodeStartNode][newNodeStartNode] = cost;
                             foundPaths[newNodeStartNode][nodeStartNode] = cost;
 
-                            // TODO: make dictionary of known nodes with path and cost to not reiterate
                             // ignore cycle if cost is greater or equal to zero
                             if (cost + newDist + dist[newNode] >= 0) continue;
 
-                            // py::print("found cycle at", newNode);
                             // handle cycle
                             int iterNode = node;
                             int iterPredecessor = pred[node];
@@ -958,16 +856,13 @@ public:
                             int i = 0;
                             
                             while (iterNode != iterPredecessor) {
-                                /*
-                                if (nodeToPredecessor[iterNode].size() > 0) {
-                                    throw std::runtime_error("node " + std::to_string(iterNode) + " has predecessors, but is part of a search path");
-                                }*/
                                 Edge edge = searchGraph.getMinCostEdge(iterNode, iterPredecessor);
                                 path.insert(path.begin() + i++, { iterNode, edge });
                                 componentAge[nodeToComponent[iterNode]]++;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
+                            componentAge[nodeToComponent[iterNode]]++;
 
                             // add path from newNode to newNodeStartNode
                             iterNode = newNode;
@@ -975,46 +870,20 @@ public:
                             Edge edge = searchGraph.getMinCostEdge(newNode, node);
                             i = 0;
                             while (iterNode != iterPredecessor) {
-                                /*
-                                if (nodeToPredecessor[iterNode].size() > 0) {
-                                    py::print(iterNode, pred[iterNode], start[iterNode]);
-                                    for (const auto& pair : nodeToPredecessor[iterNode]) py::print(pair.first, pair.second);
-                                    throw std::runtime_error("node " + std::to_string(iterNode) + " has predecessors, but is part of a search path");
-                                }*/
                                 path.insert(path.end() - i++, { iterNode, edge });
                                 edge = searchGraph.getMinCostEdge(iterPredecessor, iterNode);
                                 componentAge[nodeToComponent[iterNode]]++;
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
+                            componentAge[nodeToComponent[iterNode]]++;
                             path.insert(path.end() - i++, { iterNode, edge });
-                            /*
-                            py::print("component age:", nodeComponent, componentAge[nodeComponent]);
-                            auto it = components.find(nodeComponent);
-                            if (it == components.end()) {
-                                py::print("component", nodeComponent, "is not in components.");
-                            }
-                            else {
-                                py::print(components[nodeComponent].size());
-                            }*/
 
                             int newComponent = handleCycle(path);
                             
                             componentAge[nodeComponent]++;
-
-                            /*
-                            py::print("component age:", nodeComponent, componentAge[nodeComponent]);
-                            it = components.find(nodeComponent);
-                            if (it == components.end()) {
-                                py::print("component", nodeComponent, "is not in components.");
-                            }
-                            else {
-                                py::print(components[nodeComponent].size());
-                            }*/
                             
                             componentAge[newComponent] = 0;
-
-                            // py::print("new component age:", newComponent, componentAge[newComponent]);
 
                             for (const auto node : components[newComponent]) {
                                 double cost = std::get<1>(getLowestCostPredecessor(node));
@@ -1027,28 +896,15 @@ public:
                                 nodeAge[node] = 0;
                             };
 
-                            // py::print("component age:", nodeComponent, componentAge[nodeComponent]);
-
                             // think about what happens after cycle was cut, maybe restart?
                             fullContinue = true;
                             break;
                         } else {
-                            // py::print("found path at", newNode);
-                            /*
-                            if (nodeToPredecessor[newNodeStartNode].size() == 0 || nodeToPredecessor[nodeStartNode].size() == 0) {
-                                py::print(newNodeStartNode);
-                                py::print("newNodeStartNode:", newNodeStartNode, pred[newNodeStartNode], start[newNodeStartNode], newNodeComponent);
-                                for (const auto& pair : nodeToPredecessor[newNodeStartNode]) py::print(pair.first, pair.second);
-                                py::print("nodeStartNode:", nodeStartNode, pred[nodeStartNode], start[nodeStartNode], nodeComponent);
-                                for (const auto& pair : nodeToPredecessor[nodeStartNode]) py::print(pair.first, pair.second);
-                                throw std::runtime_error("tried to make path between a node that is not part of a bigger component");
-                            }*/
-
                             // found path between two components
 
                             nodeToPredecessor[node][newNode] = 0;
                             nodeToPredecessor[newNode][node] = 0;
-                            // py::print("node, newNode:", node, newNode);
+
                             if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(node, newNode).id);
 
                             // add nodes between node and nodeStartNode
@@ -1059,16 +915,10 @@ public:
                             int node3 = newNode;
                             int node4 = node;
                             int iterNodeComponent;
-                            // py::print("path node to start node:", node, nodeStartNode);
-                            // in rare cases this loop will not end at the newNodeStartNode, but earlier
-                            while (iterNode != iterPredecessor) {
-                                // py::print(iterNode, iterPredecessor);
-                                if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(iterNode, iterPredecessor).id);
 
-                                /*
-                                if (iterNode == newNode) {
-                                    throw std::runtime_error("path is not a path");
-                                }*/
+                            while (iterNode != iterPredecessor) {
+
+                                if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(iterNode, iterPredecessor).id);
 
                                 nodeToPredecessor[iterNode][iterPredecessor] = 0;
                                 nodeToPredecessor[iterPredecessor][iterNode] = 0;
@@ -1087,16 +937,10 @@ public:
                             // add nodes between newNode and newNodeStartNode
                             iterNode = newNode;
                             iterPredecessor = pred[newNode];
-                            // py::print("path newNode to newNodeStartNode:");
-                            // in rare cases this loop will not end at the newNodeStartNode, but earlier
+
                             while (iterNode != iterPredecessor) {
                                 // py::print(iterNode, iterPredecessor);
                                 if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(iterNode, iterPredecessor).id);
-
-                                /*
-                                if (iterNode == node) {
-                                    throw std::runtime_error("path is not a path");
-                                }*/
 
                                 nodeToPredecessor[iterNode][iterPredecessor] = 0;
                                 nodeToPredecessor[iterPredecessor][iterNode] = 0;
@@ -1111,21 +955,11 @@ public:
                                 iterNode = iterPredecessor;
                                 iterPredecessor = pred[iterPredecessor];
                             };
-
-                            /*
-                            if (nodeToPredecessor[node].size() < 2 || nodeToPredecessor[newNode].size() < 2) {
-                                throw std::runtime_error("not correctly connected");
-                            }*/
                             
                             componentAge[newNodeComponent]++;
                             componentAge[nodeComponent]++;
                             mergeComponents(nodeComponent, newNodeComponent);
 
-                            // eliminate self edges
-                            // TODO: only check necessary nodes for self edges
-                            // handleSelfEdges();
-
-                            // updateComponentCost(nodeComponent);
                             updateComponentCostInDirection(nodeComponent, node1, node2);
                             updateComponentCostInDirection(nodeComponent, node3, node4);
 
@@ -1159,36 +993,24 @@ public:
                         }
 
                         fullContinue = false;
+                        fullContinue = false;
                         continue;
                     }
 
                     // don't add if cost is not good enough
                     if (newCost >= 0) continue;
-                    // comparing dist and cost? two different aspects
-                    if (costVec[newNode] <= newCost) continue;
-
-                    /*
-                    if (nodeToPredecessor[newNode].size() > 0) {
-                        py::print(newNodeStartNode, nodeStartNode);
-                        py::print(newNode, pred[newNode], start[newNode]);
-                        for (const auto& pair : nodeToPredecessor[newNode]) py::print(pair.first, pair.second);
-                        throw std::runtime_error("node " + std::to_string(newNode) + " has predecessors, but tried to add to search path");
-                    }*/
-
-                    // add new node to
-                    // py::print("priority queue push: ", newCost, edge.node2, node);
 
                     if (trackHistory) {
                         searchHistory.push_back(searchGraph.getEdges(node, newNode)[0].id);
                     };
-
+                    
                     priorityQueue.push({ newCost, newNode, nodeStartNode, nodeComponent, nodeComponentAge });
                     costVec[newNode] = newCost;
                     dist[newNode] = newDist;
                     pred[newNode] = node;
                     start[newNode] = nodeStartNode;
-                    fromComponent[node] = nodeComponent;
-                    nodeAge[node] = nodeComponentAge;
+                    fromComponent[newNode] = nodeComponent;
+                    nodeAge[newNode] = nodeComponentAge;
                 };
             };
         };
@@ -1206,8 +1028,6 @@ public:
             madeCut.clear();
             madeMerge.clear();
         };
-
-        if (debug) py::print("searching from", startNode, "of component", startComponentId);
 
         std::map<int, std::tuple<int, double>> foundNodes;
         double tmpCost = 0;
@@ -1237,11 +1057,9 @@ public:
 
             foundNodes[node] = { predecessor, cost };
 
-            // node to component?
             if (nodeToPredecessor[node].size() > 0 && node != startNode) {
                 int componentId = nodeToComponent[node];
                 if (componentId == startComponentId) {
-                    // if (debug) py::print("found cycle for nodes ", startNode, " and ", node, " in component ", componentId);
                     // found cycle
                     // find path through component and add to cycle
                     auto [path, pathCost] = findPath(startNode, node);
@@ -1266,10 +1084,7 @@ public:
                 // update node_to_predecessor to prepare for merging
                 iterNode = node;
                 iterPredecessor = predecessor;
-                if (debug) py::print("merging nodes from", startNode, "to", node, "with path:");
-                if (debug) py::print(node);
                 while (iterNode != startNode) {
-                    if (debug) py::print(iterPredecessor, nodeToComponent[iterPredecessor], std::get<1>(getLowestCostPredecessor(iterPredecessor)));
 
                     if (trackHistory) madeMerge.push_back(searchGraph.getMinCostEdge(node, predecessor).id);
 
@@ -1284,7 +1099,6 @@ public:
                 };
                 updateComponentCost(startComponentId);
                 return true;
-                // extension here
             };
 
             // add next nodes to node queue and calculate cost
@@ -1339,9 +1153,6 @@ public:
             }
         }
         file << "\n";
-
-        // std::lock_guard<std::mutex> lock(mtx);
-        // fullHistory.push_back({ searchHistory, madeCut, madeMerge });
     }
 
     std::vector<std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>> getHistory() {
@@ -1354,7 +1165,6 @@ public:
         int maxIterations = 1000;
         int i = 0;
         while (ignoreNodes.size() < searchGraph.getAllNodeIds().size() and i < maxIterations) {
-            if (debug) py::print("iteration:", i++);
             double minCost = MAX_DOUBLE;
             int minNode;
             for (const auto& node : searchGraph.getAllNodeIds()) {
@@ -1366,8 +1176,6 @@ public:
                     minNode = node;
                 };
             };
-
-            if (debug) py::print("min cost:", minCost, "with node", minNode);
 
             handleSelfEdges();
             if (!searchFrom(minNode)) {
@@ -1383,22 +1191,28 @@ public:
         auto now = std::chrono::system_clock::now();
         auto now_c = std::chrono::system_clock::to_time_t(now);
 
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d_%H-%M-%S");
-        filename = ss.str() + ".txt";
-        file.open(filename);
-        py::print("created file", filename);
+        if (trackHistory) {
+            std::stringstream ss;
+            ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d_%H-%M-%S");
+            filename = ss.str() + ".txt";
+            file.open(filename);
+            py::print("created file", filename);
+        }
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        // score = 0;
         py::print("starting initial setup");
         initialSetup();
         py::print("finished initial setup, starting search");
 
         searchParallel(false);
-        // handleSelfEdges();
-        if (trackHistory) setHistory();
+
+        if (trackHistory) {
+            searchHistory.clear();
+            madeCut.clear();
+            madeMerge.clear();
+            setHistory();
+        };
         
         py::print("making cuts");
 
@@ -1425,10 +1239,9 @@ public:
         file.open(filename);
         py::print("created file", filename);
 
-        // score = 0;
         py::print("starting initial setup");
         initialSetup();
-        // validateState();
+
         py::print("finished initial setup, starting search");
         search();
         py::print("finished search");
@@ -1443,26 +1256,6 @@ Solver getSolver() {
     return Solver();
 };
 
-/*
-int main() {
-    // Create a graph
-    Graph g;
-
-    // Add edges with weights
-    g.addEdge(0, 1, 1, 3, 1);
-    g.addEdge(0, 2, 1, 5, 2);
-    g.addEdge(1, 2, 1, 2, 3);
-    g.addEdge(1, 3, 1, 7, 4);
-    g.addEdge(0, 1, 2, 2, 5);
-    g.addEdge(1, 0, 3, 3, 6);
-
-
-    // Print the graph with colors
-    std::cout << "Finished\n";
-
-    return 0;
-}
-*/
 
 PYBIND11_MODULE(spm_solver, m) {
     m.doc() = R"pbdoc(
