@@ -1228,28 +1228,6 @@ public:
 
         return multicut;
     };
-
-    std::set<int> solve() {
-        auto now = std::chrono::system_clock::now();
-        auto now_c = std::chrono::system_clock::to_time_t(now);
-
-        std::stringstream ss;
-        ss << std::put_time(std::localtime(&now_c), "%Y-%m-%d_%H-%M-%S");
-        filename = ss.str() + ".txt";
-        file.open(filename);
-        py::print("created file", filename);
-
-        py::print("starting initial setup");
-        initialSetup();
-
-        py::print("finished initial setup, starting search");
-        search();
-        py::print("finished search");
-
-        file.close();
-
-        return multicut;
-    };
 };
 
 Solver getSolver() {
@@ -1275,7 +1253,6 @@ PYBIND11_MODULE(spm_solver, m) {
         .def(pybind11::init<>())
         .def("load_graph", &Solver::loadGraph)
         .def("load_search_graph", &Solver::loadSearchGraph)
-        .def("solve", &Solver::solve)
         .def("get_state", &Solver::getState)
         .def("get_history", &Solver::getHistory)
         .def("get_score", &Solver::getScore)
